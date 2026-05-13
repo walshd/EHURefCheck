@@ -572,15 +572,55 @@ async function extractPDF(file) {
   let out = '';
   for (let p = 1; p <= pdf.numPages; p++) {
     const page    = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    // Preserve line breaks by using y-position changes
-    let lastY = null;
-    for (const item of content.items) {
-      if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) out += '\n';
-      out += item.str;
-      lastY = item.transform[5];
+    const viewport = page.getViewport({ scale: 1 });
+    const content  = await page.getTextContent();
+
+    if (!content.items.length) { out += '\n'; continue; }
+
+    // ── Column detection ──────────────────────────────────────────
+    // Academic papers (IEEE, APA journals, etc.) use two-column layouts.
+    // If we naively stream items by y-position across both columns, the
+    // section heading (e.g. "REFERENCES") can end up concatenated with
+    // body text from the opposite column at the same y-coordinate, making
+    // it invisible to heading-detection regexes.
+    //
+    // Strategy: split items at the page midpoint. If both halves contain
+    // a meaningful number of items, treat them as separate columns and
+    // emit left-column text first, then right-column text.
+    const midX       = viewport.width / 2;
+    const leftItems  = content.items.filter(i => i.transform[4] < midX);
+    const rightItems = content.items.filter(i => i.transform[4] >= midX);
+    const ratio      = Math.min(leftItems.length, rightItems.length) /
+                       Math.max(leftItems.length, rightItems.length || 1);
+    const isTwoCol   = leftItems.length > 4 && rightItems.length > 4 && ratio > 0.25;
+
+    if (isTwoCol) {
+      out += renderPDFColumn(leftItems)  + '\n';
+      out += renderPDFColumn(rightItems) + '\n';
+    } else {
+      out += renderPDFColumn(content.items) + '\n';
     }
-    out += '\n';
+  }
+  return out;
+}
+
+// Render one column (or a full single-column page) of PDF text items.
+// Items are sorted top-to-bottom (high y → low y in PDF coordinates),
+// then left-to-right within the same line.
+function renderPDFColumn(items) {
+  if (!items.length) return '';
+  const sorted = [...items].sort((a, b) => {
+    const dy = b.transform[5] - a.transform[5]; // descending y
+    if (Math.abs(dy) > 3) return dy;
+    return a.transform[4] - b.transform[4];      // ascending x
+  });
+  let out   = '';
+  let lastY = null;
+  for (const item of sorted) {
+    const y = item.transform[5];
+    if (lastY !== null && Math.abs(y - lastY) > 3) out += '\n';
+    out += item.str;
+    lastY = y;
   }
   return out;
 }
@@ -601,6 +641,7 @@ function parseDocument(rawText) {
   // missed and the fallback heuristic would fire, splitting at the wrong place.
   const text = rawText.replace(/\f/g, '\n');
 
+  // Primary: heading alone on its own line (most common)
   const headingPatterns = [
     /^references?\s*$/im,
     /^bibliography\s*$/im,
@@ -614,6 +655,15 @@ function parseDocument(rawText) {
     /^(?:[IVXivx]+|[0-9]+)\.\s+works?\s+cited\s*$/im,
   ];
 
+  // Secondary: heading embedded mid-line (can happen with two-column PDFs even
+  // after column separation — e.g. "...conclusion.REFERENCES" or "REFERENCES[1]").
+  // These are tried only if the primary patterns fail.
+  const embeddedHeadingPatterns = [
+    /\bREFERENCES\b/,
+    /\bBIBLIOGRAPHY\b/,
+    /\bWORKS\s+CITED\b/,
+  ];
+
   let splitAt = -1;
   let headingLen = 0;
 
@@ -623,6 +673,18 @@ function parseDocument(rawText) {
       splitAt    = m.index;
       headingLen = m[0].length;
       break;
+    }
+  }
+
+  // Second pass: embedded heading (two-column PDF artefact)
+  if (splitAt === -1) {
+    for (const pat of embeddedHeadingPatterns) {
+      const m = text.match(pat);
+      if (m && m.index > text.length * 0.25) {
+        splitAt    = m.index;
+        headingLen = m[0].length;
+        break;
+      }
     }
   }
 
