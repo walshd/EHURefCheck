@@ -619,10 +619,37 @@ function renderPDFColumn(items) {
   for (const item of sorted) {
     const y = item.transform[5];
     if (lastY !== null && Math.abs(y - lastY) > 3) out += '\n';
-    out += item.str;
+    out += decodeEncodedItem(item.str);
     lastY = y;
   }
   return out;
+}
+
+// Some PDFs (commonly from IEEE Xplore and similar publishers) embed fonts that
+// shift every character code by -29 relative to standard ASCII. This manifests
+// as U+0003 (ETX control char) appearing where a space should be, because
+// space (0x20 = 32) minus 29 equals 3. The heading "REFERENCES" appears as
+// "5()(5(1&(6", "[1]" appears as ">@", etc.
+//
+// Detection: if the string contains U+0003, it is almost certainly encoded this
+// way — ETX never appears in normal document text. When detected, add 29 back
+// to every character code to recover the original text.
+function decodeEncodedItem(str) {
+  // Detect the -29 font encoding shift used by some IEEE/publisher PDFs.
+  // Every character is mapped as: standard_code - 29 → encoded_code.
+  // Space (0x20=32) becomes ETX (0x03=3); other chars land in the 1–98 range.
+  // Detection: ANY control character (codepoints 1–31) in the string signals
+  // this encoding — normal PDF text items never contain control chars.
+  // PDF.js also injects raw ASCII spaces (0x20) as word-spacing adjustments;
+  // strip those before decoding so they don't incorrectly shift to '=' (0x3D).
+  if (!str) return str;
+  if (!str.split('').some(c => { const n = c.charCodeAt(0); return n > 0 && n < 32; })) return str;
+  return str.replace(/ /g, '').split('').map(c => {
+    const code = c.charCodeAt(0);
+    if (code === 0) return '';
+    return String.fromCharCode(code + 29);
+  }).join('');
+})).join('');
 }
 
 async function extractDOCX(file) {
