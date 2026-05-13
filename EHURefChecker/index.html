@@ -175,6 +175,20 @@
       margin-bottom: 1.5rem;
     }
     .results-hdr h2 { font-size: 1.15rem; }
+    .style-pill-row {
+      font-size: .78rem; color: var(--muted); margin-top: .2rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .style-pill {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .02em;
+      border-radius: 99px;
+      padding: .15rem .65rem;
+    }
 
     /* Summary stats */
     .stat-grid {
@@ -304,8 +318,11 @@
     /* ── Print / PDF export styles ── */
     @media print {
       body { background: #fff; font-size: 10pt; color: #000; }
-      header, #upload-section, #loading-section, .results-hdr, .filter-bar,
+      header, #upload-section, #loading-section, .filter-bar,
       .btn-outline, .btn-export { display: none !important; }
+      .results-hdr { margin-bottom: .75rem; }
+      .results-hdr h2 { font-size: 1.1rem; font-weight: 700; }
+      .results-hdr > div:last-child { display: none !important; }
       #results-section { display: block !important; }
       .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; margin-bottom: 1rem; }
       .stat-box { border: 1px solid #ccc; border-radius: 4px; padding: .5rem; text-align: center; break-inside: avoid; }
@@ -403,7 +420,12 @@
   <!-- ═══ RESULTS SECTION ═══ -->
   <section id="results-section">
     <div class="results-hdr">
-      <h2>Results</h2>
+      <div>
+        <h2>Results</h2>
+        <div class="style-pill-row">
+          Checked against: <span class="style-pill" id="style-badge"></span>
+        </div>
+      </div>
       <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
         <button class="btn-export" id="export-pdf-btn" title="Save results as PDF">⬇ Export PDF</button>
         <button class="btn-outline" id="check-another-btn">↩ Check Another Document</button>
@@ -1550,6 +1572,13 @@ function renderResults(results, style, bibFound) {
   const statGrid      = document.getElementById('stat-grid');
   const alertsCont    = document.getElementById('alerts-container');
   const refListCont   = document.getElementById('ref-list-container');
+
+  // ── Style badge ──
+  const styleBadge = document.getElementById('style-badge');
+  if (styleBadge) {
+    const sel = document.getElementById('ref-style');
+    styleBadge.textContent = sel ? sel.options[sel.selectedIndex].text : style;
+  }
 
   const total      = results.checked.length;
   const withIssues = results.checked.filter(r => r.issues.length > 0).length;
