@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EHU Reference Checker</title>
+  <style>
+    :root {
+      --primary:       #1a3a5c;
+      --primary-light: #2558a0;
+      --accent:        #c0392b;
+      --success:       #2e7d32;
+      --warning-col:   #e65100;
+      --error-col:     #b71c1c;
+      --bg:            #f4f6f9;
+      --card:          #ffffff;
+      --text:          #1c1c1c;
+      --muted:         #5f6368;
+      --border:        #dadce0;
+      --radius:        8px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    }
+    header .inner { max-width: 900px; margin: 0 auto; }
+    header h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; }
+    header p  { font-size: .85rem; opacity: .78; margin-top: .2rem; }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Upload zone ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      background: #f8f9ff;
+      position: relative;
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over { border-color: var(--primary); background: #eef2ff; }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-zone .icon { font-size: 2.4rem; margin-bottom: .6rem; display: block; }
+    .upload-zone h3 { font-size: 1rem; color: var(--primary); margin-bottom: .35rem; }
+    .upload-zone p  { font-size: .82rem; color: var(--muted); }
+
+    .file-badge {
+      display: none;
+      align-items: center;
+      gap: .6rem;
+      margin-top: .9rem;
+      padding: .65rem 1rem;
+      background: #e8f5e9;
+      border: 1px solid #a5d6a7;
+      border-radius: var(--radius);
+      font-size: .875rem;
+    }
+    .file-badge.show { display: flex; }
+    .file-badge .clear { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 1rem; }
+
+    /* ── Form ── */
+    .form-group { margin-bottom: 1.2rem; }
+    label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: .4rem; }
+
+    select {
+      width: 100%;
+      padding: .6rem .85rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: .875rem;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+    }
+    select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,58,92,.15); }
+
+    .btn-primary {
+      display: block; width: 100%;
+      padding: .82rem 1.5rem;
+      background: var(--primary); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: background .2s;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-light); }
+    .btn-primary:disabled { background: #9e9e9e; cursor: not-allowed; }
+
+    .btn-outline {
+      padding: .55rem 1.1rem;
+      background: #fff; color: var(--primary);
+      border: 1.5px solid var(--primary);
+      border-radius: var(--radius);
+      font-size: .875rem; font-weight: 600;
+      cursor: pointer; transition: all .2s;
+    }
+    .btn-outline:hover { background: var(--primary); color: #fff; }
+
+    /* ── Privacy notice ── */
+    .privacy-notice {
+      display: flex; align-items: flex-start; gap: .7rem;
+      margin-top: 1.2rem; padding: .85rem 1rem;
+      background: #eef5ff; border: 1px solid #b3cfee;
+      border-radius: var(--radius);
+      font-size: .8rem; color: var(--primary);
+    }
+    .privacy-notice .lock { font-size: 1rem; flex-shrink: 0; margin-top: .1rem; }
+
+    /* ── Loading ── */
+    #loading-section { display: none; text-align: center; padding: 3.5rem 1rem; }
+    #loading-section.show { display: block; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .85s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-msg { color: var(--muted); font-size: .875rem; margin-top: .4rem; }
+
+    /* ── Results ── */
+    #results-section { display: none; }
+    #results-section.show { display: block; }
+
+    .results-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .results-hdr h2 { font-size: 1.15rem; }
+
+    /* Summary stats */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .stat-box {
+      background: #fff; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem; text-align: center;
+    }
+    .stat-box .num { font-size: 2rem; font-weight: 700; }
+    .stat-box .lbl { font-size: .78rem; color: var(--muted); margin-top: .15rem; }
+    .stat-box.ok   .num { color: var(--success); }
+    .stat-box.bad  .num { color: var(--error-col); }
+    .stat-box.info .num { color: var(--primary); }
+
+    /* Alert boxes */
+    .alert {
+      padding: .9rem 1.1rem; border-radius: var(--radius);
+      margin-bottom: 1rem; font-size: .84rem;
+    }
+    .alert-warn {
+      background: #fff8e1; border: 1px solid #ffe082; color: #5f4000;
+    }
+    .alert-info {
+      background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20;
+      text-align: center; padding: 1.5rem;
+    }
+    .alert-info h3 { font-size: 1.1rem; margin-bottom: .4rem; }
+    .alert-info p  { font-size: .85rem; opacity: .85; }
+    .alert-err {
+      background: #ffebee; border: 1px solid #ef9a9a; color: var(--error-col);
+    }
+
+    .alert h4 { font-size: .875rem; font-weight: 700; margin-bottom: .5rem; }
+    .alert ul { list-style: none; }
+    .alert ul li { padding: .18rem 0; }
+    .alert ul li::before { content: '→ '; }
+
+    /* Filter bar */
+    .filter-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .filter-pill {
+      padding: .32rem .8rem;
+      border: 1px solid var(--border); border-radius: 20px;
+      background: #fff; font-size: .78rem; cursor: pointer; transition: all .15s;
+    }
+    .filter-pill.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* Reference cards */
+    .ref-card {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: .75rem; overflow: hidden;
+    }
+    .ref-card.card-ok   { border-color: #a5d6a7; }
+    .ref-card.card-warn { border-color: #ef9a9a; }
+
+    .ref-card-hdr {
+      display: flex; align-items: flex-start; gap: .75rem;
+      padding: .85rem 1rem;
+    }
+    .ref-card.card-ok   .ref-card-hdr { background: #f9fff9; }
+    .ref-card.card-warn .ref-card-hdr { background: #fff8f8; }
+
+    .status-dot {
+      flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .7rem; font-weight: 700; margin-top: .15rem;
+    }
+    .dot-ok   { background: #c8e6c9; color: var(--success); }
+    .dot-warn { background: #ffcdd2; color: var(--error-col); }
+
+    .ref-text {
+      flex: 1; font-size: .855rem; font-family: Georgia, 'Times New Roman', serif;
+      color: var(--text); line-height: 1.55;
+    }
+
+    .type-badge {
+      flex-shrink: 0; font-size: .68rem; padding: .18rem .5rem;
+      background: #e8eaf6; color: #3949ab; border-radius: 10px;
+      font-weight: 600; white-space: nowrap; margin-top: .15rem;
+    }
+
+    .ref-issues {
+      border-top: 1px solid #ffcdd2; background: #fff8f8;
+      padding: .7rem 1rem .7rem 3.5rem;
+    }
+    .issue-list { list-style: none; }
+    .issue-list li {
+      font-size: .8rem; color: #b71c1c; padding: .18rem 0;
+      display: flex; align-items: flex-start; gap: .4rem;
+    }
+    .issue-list li::before { content: '→'; flex-shrink: 0; margin-top: .05rem; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; font-size: .78rem; color: var(--muted);
+      padding: 1.5rem; border-top: 1px solid var(--border); margin-top: 2rem;
+    }
+
+    @media (max-width: 580px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .results-hdr { flex-direction: column; align-items: flex-start; gap: .75rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <h1>📚 EHU Reference Checker</h1>
+    <p>Automated reference and citation checking for academic submissions</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ═══ UPLOAD SECTION ═══ -->
+  <section id="upload-section">
+    <div class="card">
+
+      <div class="form-group">
+        <label for="ref-style">Reference Style</label>
+        <select id="ref-style">
+          <option value="ehu_harvard" selected>British Standard Harvard 2014 (EHU Default)</option>
+          <option value="apa">APA — 7th Edition</option>
+          <option value="mla">MLA — 9th Edition</option>
+          <option value="ieee">IEEE</option>
+          <option value="chicago">Chicago / Turabian (Author-Date)</option>
+          <option value="harvard">Harvard (Generic)</option>
+          <option value="vancouver">Vancouver</option>
+          <option value="mhra">MHRA</option>
+          <option value="oscola">OSCOLA</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Upload Your Document</label>
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="file-input" accept=".docx,.pdf">
+          <span class="icon">📄</span>
+          <h3>Drag and drop your file here</h3>
+          <p>or click to browse</p>
+          <p style="margin-top:.4rem;font-size:.77rem;">Supports .docx and .pdf</p>
+        </div>
+        <div class="file-badge" id="file-badge">
+          <span>✅</span>
+          <span id="file-name-label"></span>
+          <span class="clear" id="clear-btn" title="Remove file">✕</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="submit-btn" disabled>Check Work</button>
+
+      <div class="privacy-notice">
+        <span class="lock">🔒</span>
+        <span>
+          <strong>No data is stored.</strong> All processing happens entirely within your browser.
+          Your document is never uploaded to any server and no information is retained after you leave this page.
+        </span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══ LOADING SECTION ═══ -->
+  <section id="loading-section">
+    <div class="spinner"></div>
+    <h3>Analysing references…</h3>
+    <p id="loading-msg">Extracting document text</p>
+  </section>
+
+  <!-- ═══ RESULTS SECTION ═══ -->
+  <section id="results-section">
+    <div class="results-hdr">
+      <h2>Results</h2>
+      <button class="btn-outline" id="check-another-btn">↩ Check Another Document</button>
+    </div>
+
+    <div class="stat-grid" id="stat-grid"></div>
+    <div id="alerts-container"></div>
+    <div id="ref-list-container"></div>
+  </section>
+
+</div>
+
+<footer>
+  EHU Reference Checker &nbsp;·&nbsp; All processing is local — nothing is transmitted &nbsp;·&nbsp; Edge Hill University
+</footer>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+// PDF.js worker
+// ─────────────────────────────────────────────────────────────
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+// ─────────────────────────────────────────────────────────────
+// DOM
+// ─────────────────────────────────────────────────────────────
+const uploadSection   = document.getElementById('upload-section');
+const loadingSection  = document.getElementById('loading-section');
+const resultsSection  = document.getElementById('results-section');
+const uploadZone      = document.getElementById('upload-zone');
+const fileInput       = document.getElementById('file-input');
+const fileBadge       = document.getElementById('file-badge');
+const fileNameLabel   = document.getElementById('file-name-label');
+const clearBtn        = document.getElementById('clear-btn');
+const submitBtn       = document.getElementById('submit-btn');
+const loadingMsg      = document.getElementById('loading-msg');
+const checkAnotherBtn = document.getElementById('check-another-btn');
+
+// ─────────────────────────────────────────────────────────────
+// File handling
+// ─────────────────────────────────────────────────────────────
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', ()=> uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+clearBtn.addEventListener('click', e => { e.stopPropagation(); clearFile(); });
+checkAnotherBtn.addEventListener('click', resetToUpload);
+submitBtn.addEventListener('click', runCheck);
+
+function setFile(file) {
+  if (!/\.(docx|pdf)$/i.test(file.name)) {
+    alert('Please upload a .docx or .pdf file.');
+    return;
+  }
+  selectedFile = file;
+  fileNameLabel.textContent = file.name;
+  fileBadge.classList.add('show');
+  submitBtn.disabled = false;
+}
+
+function clearFile() {
+  selectedFile = null;
+  fileInput.value = '';
+  fileBadge.classList.remove('show');
+  submitBtn.disabled = true;
+}
+
+function resetToUpload() {
+  clearFile();
+  uploadSection.style.display = '';
+  loadingSection.classList.remove('show');
+  resultsSection.classList.remove('show');
+}
+
+function setMsg(msg) { loadingMsg.textContent = msg; }
+
+// ─────────────────────────────────────────────────────────────
+// Main entry
+// ─────────────────────────────────────────────────────────────
+async function runCheck() {
+  if (!selectedFile) return;
+  const style = document.getElementById('ref-style').value;
+
+  uploadSection.style.display = 'none';
+  loadingSection.classList.add('show');
+  resultsSection.classList.remove('show');
+
+  try {
+    setMsg('Extracting text from document…');
+    const rawText = await extractText(selectedFile);
+
+    setMsg('Identifying body text and references section…');
+    const { bodyText, bibText, bibFound } = parseDocument(rawText);
+
+    setMsg('Extracting in-text citations…');
+    const citations = extractCitations(bodyText, style);
+
+    setMsg('Extracting bibliography entries…');
+    const references = extractReferences(bibText, style);
+
+    setMsg('Checking format and cross-referencing…');
+    const results = checkAll(references, citations, bibText, bibFound, style);
+
+    setMsg('Generating report…');
+    renderResults(results, style, bibFound);
+
+    loadingSection.classList.remove('show');
+    resultsSection.classList.add('show');
+
+  } catch (err) {
+    console.error(err);
+    loadingSection.classList.remove('show');
+    uploadSection.style.display = '';
+    alert('Error processing document: ' + err.message +
+          '\n\nPlease check the file is not password-protected and try again.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Text extraction
+// ─────────────────────────────────────────────────────────────
+async function extractText(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'pdf')  return extractPDF(file);
+  if (ext === 'docx') return extractDOCX(file);
+  throw new Error('Unsupported file type.');
+}
+
+async function extractPDF(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let out = '';
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page    = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    // Preserve line breaks by using y-position changes
+    let lastY = null;
+    for (const item of content.items) {
+      if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) out += '\n';
+      out += item.str;
+      lastY = item.transform[5];
+    }
+    out += '\n';
+  }
+  return out;
+}
+
+async function extractDOCX(file) {
+  const buf = await file.arrayBuffer();
+  const res = await mammoth.extractRawText({ arrayBuffer: buf });
+  return res.value;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Document parsing — split body from bibliography
+// ─────────────────────────────────────────────────────────────
+function parseDocument(text) {
+  const headingPatterns = [
+    /^references?\s*$/im,
+    /^bibliography\s*$/im,
+    /^reference\s+list\s*$/im,
+    /^works?\s+cited\s*$/im,
+    /^sources?\s*$/im,
+    /^literature\s+cited\s*$/im,
+  ];
+
+  let splitAt = -1;
+  let headingLen = 0;
+
+  for (const pat of headingPatterns) {
+    const m = text.match(pat);
+    if (m && m.index > text.length * 0.25) {
+      splitAt    = m.index;
+      headingLen = m[0].length;
+      break;
+    }
+  }
+
+  // Fallback: find a cluster of lines that look like reference entries
+  if (splitAt === -1) {
+    const lines  = text.split('\n');
+    let run = 0;
+    for (let i = Math.floor(lines.length * 0.35); i < lines.length; i++) {
+      const l = lines[i].trim();
+      if (looksLikeRefStart(l)) {
+        run++;
+        if (run >= 2) {
+          const before = lines.slice(0, i - 1).join('\n');
+          splitAt    = before.length;
+          headingLen = 0;
+          break;
+        }
+      } else { run = 0; }
+    }
+  }
+
+  if (splitAt === -1) {
+    return { bodyText: text, bibText: '', bibFound: false };
+  }
+
+  return {
+    bodyText: text.slice(0, splitAt),
+    bibText:  text.slice(splitAt + headingLen).trim(),
+    bibFound: true,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Citation extraction
+// ─────────────────────────────────────────────────────────────
+function extractCitations(bodyText, style) {
+  const map = new Map();
+
+  if (['ieee', 'vancouver'].includes(style)) {
+    extractNumbered(bodyText, map);
+  } else if (style === 'mla') {
+    extractMLA(bodyText, map);
+  } else {
+    extractAuthorDate(bodyText, map);
+  }
+
+  return map;
+}
+
+function extractAuthorDate(text, map) {
+  // Parenthetical: (Smith, 2023), (Smith and Jones, 2023), (Smith et al., 2023: 45)
+  // Multiple: (Smith, 2023; Jones, 2024)
+  const parenPat = /\(([^)]{3,120}(?:\d{4}|n\.d\.)[^)]{0,30})\)/g;
+  let m;
+
+  while ((m = parenPat.exec(text)) !== null) {
+    for (const part of m[1].split(';')) {
+      const t = part.trim();
+      const yearM = t.match(/(\d{4}[a-z]?|n\.d\.)/);
+      if (!yearM) continue;
+      const year = yearM[1];
+      const surnameM = t.match(/^([A-Z][a-zÀ-ž\-']+)/);
+      if (surnameM) {
+        addCit(map, normalise(surnameM[1]) + '_' + year, surnameM[1], year);
+      } else {
+        // Corporate / organisation
+        const orgM = t.match(/^([A-Z][A-Za-z &,]+?)(?:,\s*|\s+)(?:\d{4}|n\.d\.)/);
+        if (orgM) addCit(map, normalise(orgM[1]) + '_' + year, orgM[1].trim(), year);
+      }
+    }
+  }
+
+  // Narrative: Smith (2023), Smith et al. (2023), Smith and Jones (2023)
+  const narrPat = /([A-Z][a-zÀ-ž\-']+)(?:\s+et\s+al\.)?(?:\s+and\s+[A-Z][a-zÀ-ž\-']+(?:\s+and\s+[A-Z][a-zÀ-ž\-']+)*)?\s+\((\d{4}[a-z]?|n\.d\.)\)/g;
+
+  while ((m = narrPat.exec(text)) !== null) {
+    addCit(map, normalise(m[1]) + '_' + m[2], m[1], m[2]);
+  }
+}
+
+function extractNumbered(text, map) {
+  const pat = /\[(\d+(?:[,–\-]\d+)*)\]/g;
+  let m;
+  while ((m = pat.exec(text)) !== null) {
+    for (const n of expandRange(m[1])) {
+      const k = 'num_' + n;
+      if (!map.has(k)) map.set(k, { number: n, count: 0 });
+      map.get(k).count++;
+    }
+  }
+}
+
+function extractMLA(text, map) {
+  // (Surname pageNum) — no year
+  const pat = /\(([A-Z][a-z\-']+)(?:\s+\d+)?\)/g;
+  let m;
+  while ((m = pat.exec(text)) !== null) {
+    const k = normalise(m[1]);
+    if (!map.has(k)) map.set(k, { surname: m[1], count: 0 });
+    map.get(k).count++;
+  }
+}
+
+function expandRange(str) {
+  const nums = new Set();
+  for (const part of str.split(',')) {
+    const rng = part.split(/[-–]/);
+    if (rng.length === 2) {
+      for (let i = +rng[0]; i <= +rng[1]; i++) nums.add(i);
+    } else {
+      nums.add(+part.trim());
+    }
+  }
+  return [...nums];
+}
+
+function addCit(map, key, surname, year) {
+  if (!map.has(key)) map.set(key, { surname, year, count: 0 });
+  map.get(key).count++;
+}
+
+function normalise(s) { return s.toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+// ─────────────────────────────────────────────────────────────
+// Reference extraction
+// ─────────────────────────────────────────────────────────────
+function extractReferences(bibText, style) {
+  if (!bibText || bibText.trim().length < 5) return [];
+
+  const lines = bibText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const refs   = [];
+  let current  = '';
+
+  for (const line of lines) {
+    if (current.length > 0 && looksLikeRefStart(line)) {
+      refs.push(current.trim());
+      current = line;
+    } else {
+      current += (current ? ' ' : '') + line;
+    }
+  }
+  if (current.trim().length > 5) refs.push(current.trim());
+
+  return refs;
+}
+
+function looksLikeRefStart(line) {
+  if (!line || line.length < 4) return false;
+  if (/^\[\d+\]/.test(line))                             return true; // [1] IEEE / Vancouver
+  if (/^\d+\.\s+[A-Z]/.test(line))                       return true; // 1. Vancouver
+  if (/^[A-Z]{2,}[,\s]/.test(line))                      return true; // SMITH, J. — Harvard caps
+  if (/^[A-Z][a-z\-']+,\s+[A-Z]/.test(line) && /\d{4}/.test(line)) return true; // Smith, J. 2023
+  if (/^Anon[.\s]/.test(line))                           return true;
+  if (/^[A-Z][a-z].{5,},\s+\d{4}/.test(line))           return true; // Title-first (Acts, Films)
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Extract cross-ref key from a bibliography entry
+// ─────────────────────────────────────────────────────────────
+function refKey(text, style) {
+  // Numbered
+  let m = text.match(/^\[(\d+)\]/);
+  if (m) return { key: 'num_' + m[1], number: +m[1], isNum: true };
+  m = text.match(/^(\d+)\.\s/);
+  if (m) return { key: 'num_' + m[1], number: +m[1], isNum: true };
+
+  const yearM = text.match(/\b(\d{4}[a-z]?)\b/);
+  const year  = yearM ? yearM[1] : 'nd';
+
+  // CAPS surname: SMITH, J.
+  m = text.match(/^([A-Z][A-Z\-']{1,}),/);
+  if (m) return { key: normalise(m[1]) + '_' + year, surname: m[1], year };
+
+  // Sentence-case surname: Smith, J.
+  m = text.match(/^([A-Z][a-z\-']+),\s+[A-Z]/);
+  if (m) return { key: normalise(m[1]) + '_' + year, surname: m[1], year };
+
+  // Anon
+  if (/^Anon/i.test(text)) return { key: 'anon_' + year, surname: 'Anon', year };
+
+  // Title-first: first word
+  m = text.match(/^([A-Z][a-z]+)/);
+  if (m) return { key: normalise(m[1]) + '_' + year, surname: m[1], year };
+
+  return { key: normalise(text.slice(0, 12)) + '_' + year, year };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main checking engine
+// ─────────────────────────────────────────────────────────────
+function checkAll(references, citations, bibText, bibFound, style) {
+  const checked = references.map(text => {
+    const issues = [];
+    validateRef(text, style, issues);
+    const ki = refKey(text, style);
+    return { text, ki, issues, cited: false };
+  });
+
+  // Build a key→index map for cross-referencing
+  const keyIdx = new Map();
+  checked.forEach((r, i) => keyIdx.set(r.ki.key, i));
+
+  const orphaned = []; // in text, not in bib
+  const uncited  = []; // in bib, not in text
+
+  if (['ieee', 'vancouver'].includes(style)) {
+    const total = checked.length;
+    for (const [k, c] of citations) {
+      const n = c.number;
+      if (n >= 1 && n <= total) {
+        checked[n - 1].cited = true;
+      } else {
+        orphaned.push(c);
+      }
+    }
+  } else {
+    for (const [k, c] of citations) {
+      if (keyIdx.has(k)) {
+        checked[keyIdx.get(k)].cited = true;
+      } else {
+        // Partial match on surname alone?
+        const surnameOnly = k.split('_')[0];
+        const partial = [...keyIdx.keys()].some(rk => rk.startsWith(surnameOnly + '_'));
+        orphaned.push({ ...c, partial });
+      }
+    }
+  }
+
+  checked.forEach((r, i) => {
+    if (!r.cited) uncited.push({ idx: i, ki: r.ki, text: r.text });
+  });
+
+  // Alphabetical order check
+  const orderIssues = [];
+  if (['ehu_harvard', 'harvard', 'apa', 'chicago', 'mla', 'mhra'].includes(style)) {
+    for (let i = 1; i < checked.length; i++) {
+      const a = (checked[i-1].ki.surname || '').toLowerCase();
+      const b = (checked[i].ki.surname   || '').toLowerCase();
+      if (b && a && b < a) {
+        orderIssues.push({
+          msg: `"${checked[i].ki.surname || checked[i].text.slice(0,40)}" should appear before "${checked[i-1].ki.surname || checked[i-1].text.slice(0,40)}" — check alphabetical ordering`,
+        });
+      }
+    }
+  }
+
+  return { checked, citations, orphaned, uncited, orderIssues, bibFound };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dispatch validator
+// ─────────────────────────────────────────────────────────────
+function validateRef(text, style, issues) {
+  switch (style) {
+    case 'ehu_harvard': return validateEHU(text, issues);
+    case 'harvard':     return validateHarvardGeneric(text, issues);
+    case 'apa':         return validateAPA(text, issues);
+    case 'ieee':        return validateIEEE(text, issues);
+    case 'mla':         return validateMLA(text, issues);
+    case 'chicago':     return validateChicago(text, issues);
+    case 'vancouver':   return validateVancouver(text, issues);
+    case 'mhra':        return validateMHRA(text, issues);
+    case 'oscola':      return validateOSCOLA(text, issues);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// EHU British Standard Harvard 2014
+// ══════════════════════════════════════════════════════════════
+const EHU_TITLE_FIRST_MARKERS = [
+  '[broadcast]', '[online].', 'hc deb.', 'hl deb.',
+  'hc bill', 'hl bill', 'si 20', 'the holy bible', 'the quran',
+];
+
+function isEHUTitleFirst(text) {
+  const low = text.toLowerCase();
+  // Films: Title [medium], Year format
+  if (/^[A-Z][a-z].+,\s+\d{4}\s+\[/.test(text)) return true;
+  // Acts of Parliament / statutory instruments
+  if (/^The\s+[A-Z].*Act\s+\d{4}/.test(text)) return true;
+  if (/^The\s+[A-Z].*Regulations\s+\d{4}/.test(text)) return true;
+  // TV/Radio programmes — title first, year second
+  for (const marker of EHU_TITLE_FIRST_MARKERS) {
+    if (low.includes(marker)) return true;
+  }
+  // Parliamentary Bills
+  if (/^[A-Z][a-z].+Bill/.test(text)) return true;
+  // Law reports: Parties v Parties [Year]
+  if (/^[A-Z][a-z].+v\s+[A-Z][a-z]/.test(text)) return true;
+  // Hansard
+  if (/^Hansard/.test(text)) return true;
+  return false;
+}
+
+function detectEHUType(text) {
+  const lo = text.toLowerCase();
+  if (lo.includes('[blog online]'))  return 'blog';
+  if (lo.includes('[mobile app'))    return 'app';
+  if (lo.includes('[facebook]'))     return 'facebook';
+  if (lo.includes('[x]') && lo.includes('available from:')) return 'twitter';
+  if (lo.includes('[online video]')) return 'online_video';
+  if (lo.includes('[podcast]'))      return 'podcast';
+  if (lo.includes('[pre-print]'))    return 'preprint';
+  if (/\[broadcast\]/.test(lo))      return 'broadcast';
+  if (lo.includes('cochrane database')) return 'cochrane';
+  if (lo.includes('[kindle ebook]')) return 'kindle';
+  if (lo.includes('[ebook]'))        return 'ebook';
+  if (/unpublished thesis|\(phd\)|\(msc\)|\(ma\)|\(mres\)|\(mphil\)/i.test(lo)) return 'thesis';
+  if ((lo.includes(' in: ') || lo.includes('\nin: ')) && /\beds?\.\b/.test(lo)) return 'chapter';
+  if (lo.includes('conference') && lo.includes(' in: ')) return 'conference';
+
+  const hasVolIssue = /\d+\s*\(\d+\)/.test(text);
+  const hasPages    = /\bpp?\.\s*\d+/.test(text);
+
+  if (hasVolIssue && hasPages) {
+    return lo.includes('[online]') ? 'journal_online' : 'journal_print';
+  }
+
+  // Newspapers have a date like "13 July." or "13 July 2023"
+  if (/\d{1,2}\s+[A-Z][a-z]+\./.test(text) && hasPages) return 'newspaper_print';
+
+  if (lo.includes('[online]') && lo.includes('available from:')) return 'online_source';
+  if (lo.includes('available from:')) return 'online_source';
+  if (lo.includes('[online]')) return 'report_online';
+
+  return 'book';
+}
+
+function validateEHU(text, issues) {
+  const type = detectEHUType(text);
+
+  // ── 1. Author format (caps) ──
+  if (!isEHUTitleFirst(text)) {
+    const firstToken = text.split(/[,\s]/)[0];
+    if (firstToken.length >= 2 && firstToken !== firstToken.toUpperCase()) {
+      issues.push(
+        'Author surname should be in full CAPITALS (e.g. SMITH, J. not Smith, J.). ' +
+        'This applies to personal and corporate/organisation names alike.'
+      );
+    }
+  }
+
+  // ── 2. Year present ──
+  if (!/\b\d{4}[a-z]?\b/.test(text) && !/\bn\.d\.\b/.test(text)) {
+    issues.push('Year of publication is missing. Use n.d. if no date is available.');
+  }
+
+  // ── 3. et al. must have a full stop ──
+  if (/\bet al[^.]/.test(text) || /\bet al$/.test(text)) {
+    issues.push('et al. must always include a full stop at the end (et al. — not et al).');
+  }
+
+  // ── 4. "and" not "&" between authors ──
+  if (/[A-Z]\.\s*&\s*[A-Z]/.test(text)) {
+    issues.push('Use "and" between multiple authors, not "&". (APA uses & — EHU Harvard does not.)');
+  }
+
+  // ── 5. Online sources: [Accessed date] ──
+  if (text.includes('Available from:') && !text.includes('[Accessed')) {
+    issues.push('Online reference is missing [Accessed date], e.g. [Accessed 12 July 2023].');
+  }
+
+  // ── Type-specific rules ──
+  switch (type) {
+    case 'book':           checkEHUBook(text, issues); break;
+    case 'journal_online': checkEHUJournalOnline(text, issues); break;
+    case 'journal_print':  checkEHUJournalPrint(text, issues); break;
+    case 'online_source':
+    case 'report_online':  checkEHUOnline(text, issues); break;
+    case 'ebook':          checkEHUEbook(text, issues, '[eBook]'); break;
+    case 'kindle':         checkEHUEbook(text, issues, '[Kindle eBook]'); break;
+    case 'chapter':        checkEHUChapter(text, issues); break;
+    case 'thesis':         checkEHUThesis(text, issues); break;
+    case 'blog':           checkEHUBlog(text, issues); break;
+    case 'online_video':   checkEHUVideo(text, issues); break;
+    case 'conference':     checkEHUConference(text, issues); break;
+    case 'newspaper_print':checkEHUNewspaper(text, issues, false); break;
+    case 'cochrane':       checkEHUJournalOnline(text, issues); break;
+  }
+}
+
+function checkEHUBook(text, issues) {
+  // Must have Place: Publisher
+  if (!/:\s+[A-Z][a-z]/.test(text)) {
+    issues.push(
+      'Book reference should include place of publication and publisher separated by a colon, e.g. London: SAGE.'
+    );
+  }
+  // Edition if present should be e.g. "2nd ed."
+  if (/\d(?:st|nd|rd|th)\s+edition/i.test(text)) {
+    issues.push('Edition should be abbreviated — use "2nd ed." rather than "2nd edition".');
+  }
+  // Should not have [online] without URL
+  if (text.includes('[online]') && !text.includes('Available from:')) {
+    issues.push('Reference includes [online] but is missing "Available from:" and the URL.');
+  }
+}
+
+function checkEHUJournalOnline(text, issues) {
+  if (!text.includes('[online]'))
+    issues.push('Online journal article should include [online] immediately after the journal name.');
+  if (!/\d+\s*\(\d+\)/.test(text))
+    issues.push('Journal reference should include volume and issue number, e.g. 22 (1).');
+  if (!/\bpp?\.\s*\d+/.test(text))
+    issues.push('Journal reference should include page numbers, e.g. pp. 31–52 or p. 12.');
+  if (!text.includes('Available from:'))
+    issues.push('Online journal article should include "Available from:" followed by the URL or DOI link.');
+  if (!text.includes('[Accessed'))
+    issues.push('Online reference should include access date, e.g. [Accessed 28 June 2023].');
+}
+
+function checkEHUJournalPrint(text, issues) {
+  if (!/\d+\s*\(\d+\)/.test(text))
+    issues.push('Journal reference should include volume and issue number, e.g. 34 (7).');
+  if (!/\bpp?\.\s*\d+/.test(text))
+    issues.push('Journal reference should include page numbers, e.g. pp. 508–513.');
+}
+
+function checkEHUOnline(text, issues) {
+  if (!text.includes('[online]'))
+    issues.push('Online reference should include [online] after the title.');
+  if (!text.includes('Available from:'))
+    issues.push('Online reference should include "Available from:" followed by the URL.');
+  if (!text.includes('[Accessed'))
+    issues.push('Online reference should include access date, e.g. [Accessed 12 July 2023].');
+}
+
+function checkEHUEbook(text, issues, tag) {
+  if (!text.includes(tag))
+    issues.push(`eBook reference should include ${tag} after the title.`);
+  if (tag === '[eBook]') {
+    if (!text.includes('Available from:'))
+      issues.push('eBook reference should include "Available from:" followed by the URL.');
+    if (!text.includes('[Accessed'))
+      issues.push('eBook reference should include access date, e.g. [Accessed 15 June 2023].');
+  }
+}
+
+function checkEHUChapter(text, issues) {
+  if (!/\bIn:\s/i.test(text))
+    issues.push('Chapter reference should include "In:" followed by the editor(s) and book title.');
+  if (!/\beds?\./.test(text))
+    issues.push('Chapter reference should include "ed." (one editor) or "eds." (multiple editors).');
+  if (!/\bpp\.\s*\d+/.test(text))
+    issues.push('Chapter reference should include the chapter page range, e.g. pp. 69–87.');
+  if (!/:\s+[A-Z][a-z]/.test(text))
+    issues.push('Chapter reference should include place of publication and publisher, e.g. London: Routledge.');
+}
+
+function checkEHUThesis(text, issues) {
+  if (!/unpublished thesis|\(phd\)|\(msc\)|\(ma\)|\(mres\)|\(mphil\)/i.test(text))
+    issues.push('Thesis reference should specify the level, e.g. Unpublished thesis (PhD).');
+}
+
+function checkEHUBlog(text, issues) {
+  if (!text.includes('[blog online]'))
+    issues.push('Blog reference should include [blog online] after the blog title.');
+  if (!text.includes('Available from:'))
+    issues.push('Blog reference should include "Available from:" followed by the URL.');
+  if (!text.includes('[Accessed'))
+    issues.push('Blog reference should include access date, e.g. [Accessed 13 June 2023].');
+}
+
+function checkEHUVideo(text, issues) {
+  if (!text.includes('[online video]'))
+    issues.push('YouTube/online video reference should include [online video] after the title.');
+  if (!text.includes('Available from:'))
+    issues.push('Video reference should include "Available from:" followed by the URL.');
+  if (!text.includes('[Accessed'))
+    issues.push('Video reference should include access date, e.g. [Accessed 13 July 2023].');
+}
+
+function checkEHUConference(text, issues) {
+  if (!/\bIn:\s/i.test(text))
+    issues.push('Conference paper reference should include "In:" followed by the conference title.');
+  if (text.includes('Available from:') && !text.includes('[Accessed'))
+    issues.push('Online conference paper reference should include access date, e.g. [Accessed 21 June 2023].');
+}
+
+function checkEHUNewspaper(text, issues, online) {
+  if (online) {
+    checkEHUOnline(text, issues);
+  } else {
+    if (!/\bpp?\.\s*\d+/.test(text))
+      issues.push('Print newspaper reference should include the page number(s), e.g. p. 8 or pp. 1–2.');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// APA 7th Edition
+// ══════════════════════════════════════════════════════════════
+function validateAPA(text, issues) {
+  // Year in parentheses after author: Surname, I. I. (2023).
+  if (!/\(\d{4}[a-z]?\)/.test(text) && !/\(n\.d\.\)/.test(text))
+    issues.push('APA: Year of publication should be in parentheses directly after the author name(s), e.g. (2023).');
+
+  // Multiple authors use & not "and"
+  if (/,\s+and\s+[A-Z]/.test(text))
+    issues.push('APA: Use & (ampersand) before the final author, not "and" — e.g. Smith, J., & Jones, A.');
+
+  // Author initials: should not use full first names (hard to enforce, soft check)
+  // Journal: should have Volume(Issue), pp–pp
+  if (/\d+\s*\(\d+\)/.test(text) && !/,\s*\d+[-–]\d+/.test(text))
+    issues.push('APA journal reference should include page numbers after the volume and issue, e.g. 22(1), 31–52.');
+
+  // DOI / URL for online sources
+  if (text.includes('[online]') && !text.includes('https://') && !text.includes('doi.org'))
+    issues.push('APA online reference should include a DOI (https://doi.org/…) or a direct URL.');
+}
+
+// ══════════════════════════════════════════════════════════════
+// IEEE
+// ══════════════════════════════════════════════════════════════
+function validateIEEE(text, issues) {
+  if (!/^\[\d+\]/.test(text))
+    issues.push('IEEE: Reference should begin with a number in square brackets, e.g. [1].');
+
+  // Author: initials before surname — I. Surname
+  // Flag if surname-first format is used
+  if (/^\[\d+\]\s+[A-Z][a-z]+,\s+[A-Z]\./.test(text))
+    issues.push('IEEE: Author format should be Initial(s) before surname, e.g. J. Smith — not Smith, J.');
+
+  // Journal refs: vol., no., pp.
+  if (text.toLowerCase().includes('vol.')) {
+    if (!text.toLowerCase().includes('no.'))
+      issues.push('IEEE journal reference should include the issue number, e.g. no. 2.');
+    if (!/\bpp\.\s*\d+/.test(text))
+      issues.push('IEEE journal reference should include page numbers, e.g. pp. 486–488.');
+  }
+
+  if (!/\d{4}/.test(text))
+    issues.push('IEEE: Year of publication is missing.');
+}
+
+// ══════════════════════════════════════════════════════════════
+// MLA 9th Edition
+// ══════════════════════════════════════════════════════════════
+function validateMLA(text, issues) {
+  // Author: Surname, Firstname
+  if (!/^[A-Z][a-z\-']+,\s+[A-Z][a-z]/.test(text))
+    issues.push('MLA: Author should be formatted as Surname, Firstname (full first name — not initials).');
+
+  // Year should NOT be in parentheses directly after author (that is APA style)
+  if (/^[A-Z][a-z]+,\s+[A-Z][a-z]+\.\s+\(\d{4}\)/.test(text))
+    issues.push('MLA: Do not place the year in parentheses directly after the author. In MLA, the year appears near the end of the reference.');
+
+  // Works Cited entries end with a period
+  if (!text.trim().endsWith('.'))
+    issues.push('MLA: Works Cited entries should end with a full stop.');
+
+  if (!/\d{4}/.test(text))
+    issues.push('MLA: Year of publication appears to be missing.');
+}
+
+// ══════════════════════════════════════════════════════════════
+// Chicago / Turabian (Author-Date)
+// ══════════════════════════════════════════════════════════════
+function validateChicago(text, issues) {
+  // Author: Surname, Firstname
+  if (!/^[A-Z][a-z\-']+,\s+[A-Z]/.test(text) && !/^[A-Z][A-Z\s]+,/.test(text))
+    issues.push('Chicago: Author surname should come first, e.g. Smith, John — not John Smith.');
+
+  // Year should follow author fairly early (author-date)
+  if (!/\d{4}/.test(text))
+    issues.push('Chicago: Year of publication is missing.');
+
+  // Books: should have a publisher
+  if (!text.includes('Available from:') && !/:\s+[A-Z]/.test(text) && !/University Press/.test(text))
+    issues.push('Chicago: Book reference should include a publisher (and place of publication for older editions).');
+}
+
+// ══════════════════════════════════════════════════════════════
+// Harvard (Generic)
+// ══════════════════════════════════════════════════════════════
+function validateHarvardGeneric(text, issues) {
+  if (!/\b\d{4}[a-z]?\b/.test(text) && !/\bn\.d\.\b/.test(text))
+    issues.push('Year of publication is missing. Use n.d. if no date is available.');
+  if (/\bet al[^.]/.test(text) || /\bet al$/.test(text))
+    issues.push('et al. must always include a full stop (et al.) — not et al without the stop.');
+  if (text.includes('Available from:') && !text.includes('[online]'))
+    issues.push('Online reference should include [online] before "Available from:".');
+  if (text.includes('Available from:') && !text.includes('[Accessed'))
+    issues.push('Online reference should include access date in square brackets, e.g. [Accessed 12 July 2023].');
+}
+
+// ══════════════════════════════════════════════════════════════
+// Vancouver
+// ══════════════════════════════════════════════════════════════
+function validateVancouver(text, issues) {
+  if (!/^\d+\./.test(text))
+    issues.push('Vancouver: References should begin with a consecutive number followed by a full stop, e.g. 1.');
+
+  // Journal format: Year;Vol(Issue):Pages
+  if (/\d{4};\d+/.test(text)) {
+    if (!text.includes(':'))
+      issues.push('Vancouver journal reference should include page numbers after a colon, e.g. 2023;22(1):31-52.');
+  } else if (!/\d{4}/.test(text)) {
+    issues.push('Vancouver: Year of publication appears to be missing.');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// MHRA
+// ══════════════════════════════════════════════════════════════
+function validateMHRA(text, issues) {
+  if (!/\d{4}/.test(text))
+    issues.push('MHRA: Year of publication appears to be missing.');
+
+  // Bibliography format: Surname, Forename, Title (Place: Publisher, Year)
+  if (!/\(\s*[A-Za-z]+:/.test(text) && !text.includes('Available from:'))
+    issues.push('MHRA bibliography entry should include publisher details in the format (Place: Publisher, Year).');
+}
+
+// ══════════════════════════════════════════════════════════════
+// OSCOLA
+// ══════════════════════════════════════════════════════════════
+function validateOSCOLA(text, issues) {
+  if (!/\d{4}/.test(text))
+    issues.push('OSCOLA: Year of publication appears to be missing.');
+  // OSCOLA secondary sources: Author, Title (Publisher Year)
+  // Difficult to validate generically — just check year present
+}
+
+// ─────────────────────────────────────────────────────────────
+// Render results
+// ─────────────────────────────────────────────────────────────
+const TYPE_LABELS = {
+  book: 'Book', journal_online: 'Journal (online)', journal_print: 'Journal (print)',
+  online_source: 'Online source', report_online: 'Report (online)',
+  website: 'Website', ebook: 'eBook', kindle: 'Kindle eBook',
+  chapter: 'Book chapter', thesis: 'Thesis', blog: 'Blog',
+  online_video: 'Online video', conference: 'Conference paper',
+  newspaper_print: 'Newspaper (print)', newspaper_online: 'Newspaper (online)',
+  podcast: 'Podcast', broadcast: 'Broadcast', twitter: 'X / Twitter',
+  facebook: 'Facebook', app: 'App', preprint: 'Pre-print',
+  cochrane: 'Cochrane', default: 'Reference',
+};
+
+function typeBadgeLabel(text, style) {
+  if (style !== 'ehu_harvard') return style.replace('_', ' ').toUpperCase();
+  return TYPE_LABELS[detectEHUType(text)] || TYPE_LABELS.default;
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderResults(results, style, bibFound) {
+  const statGrid      = document.getElementById('stat-grid');
+  const alertsCont    = document.getElementById('alerts-container');
+  const refListCont   = document.getElementById('ref-list-container');
+
+  const total      = results.checked.length;
+  const withIssues = results.checked.filter(r => r.issues.length > 0).length;
+  const citCount   = results.citations.size;
+  const crossProb  = results.orphaned.length + results.uncited.length;
+
+  // ── Stats ──
+  statGrid.innerHTML = `
+    <div class="stat-box info"><div class="num">${total}</div><div class="lbl">References found</div></div>
+    <div class="stat-box info"><div class="num">${citCount}</div><div class="lbl">Citations found</div></div>
+    <div class="stat-box ${withIssues > 0 ? 'bad' : 'ok'}"><div class="num">${withIssues}</div><div class="lbl">Format issues</div></div>
+    <div class="stat-box ${crossProb > 0 ? 'bad' : 'ok'}"><div class="num">${crossProb}</div><div class="lbl">Cross-ref issues</div></div>
+  `;
+
+  let alertsHTML = '';
+
+  // ── No bibliography detected ──
+  if (!bibFound) {
+    alertsHTML += `
+      <div class="alert alert-warn">
+        <h4>⚠ No references / bibliography section detected</h4>
+        <p>The checker could not find a section headed "References", "Bibliography", or "Reference List".
+        Please ensure your reference list uses one of these headings. Cross-referencing checks could not be completed.</p>
+      </div>
+    `;
+  }
+
+  // ── Orphaned citations ──
+  if (results.orphaned.length > 0) {
+    const items = results.orphaned.map(c => {
+      const hint = c.partial ? ' (a source with this surname exists — check the year matches)' : '';
+      const label = c.surname ? `${c.surname} (${c.year})` : `Reference [${c.number}]`;
+      return `<li><strong>${esc(label)}</strong> — cited in the body text but no matching entry found in the reference list${esc(hint)}</li>`;
+    }).join('');
+    alertsHTML += `
+      <div class="alert alert-warn">
+        <h4>⚠ Citations with no matching reference list entry (${results.orphaned.length})</h4>
+        <ul>${items}</ul>
+      </div>
+    `;
+  }
+
+  // ── Uncited references ──
+  if (results.uncited.length > 0) {
+    const items = results.uncited.map(u => {
+      const label = u.ki.surname ? `${u.ki.surname} (${u.ki.year})` : u.text.slice(0, 60) + '…';
+      return `<li><strong>${esc(label)}</strong> — appears in the reference list but was not found cited in the body text</li>`;
+    }).join('');
+    alertsHTML += `
+      <div class="alert alert-warn">
+        <h4>⚠ Reference list entries not cited in the body text (${results.uncited.length})</h4>
+        <ul>${items}</ul>
+      </div>
+    `;
+  }
+
+  // ── Order issues ──
+  if (results.orderIssues.length > 0) {
+    const items = results.orderIssues.map(o => `<li>${esc(o.msg)}</li>`).join('');
+    alertsHTML += `
+      <div class="alert alert-warn">
+        <h4>⚠ Possible alphabetical ordering issues (${results.orderIssues.length})</h4>
+        <ul>${items}</ul>
+      </div>
+    `;
+  }
+
+  alertsCont.innerHTML = alertsHTML;
+
+  // ── All clear ──
+  if (total === 0) {
+    refListCont.innerHTML = `
+      <div class="alert alert-warn">
+        <h4>No individual references could be extracted</h4>
+        <p>The checker was unable to identify reference entries.
+        This may be due to unusual formatting or an absent references section.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const totalIssues = withIssues + crossProb + results.orderIssues.length;
+
+  if (totalIssues === 0) {
+    refListCont.innerHTML = `
+      <div class="alert alert-info">
+        <h3>✓ No Issues Detected</h3>
+        <p>All ${total} reference${total === 1 ? '' : 's'} passed the automated checks for the selected style.
+        Automated checking cannot catch everything — please also do a careful manual review against the style guide.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // ── Reference cards ──
+  const okCount  = total - withIssues;
+  let html = `
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Reference list</p>
+    <div class="filter-bar">
+      <button class="filter-pill on"  data-f="all">All (${total})</button>
+      <button class="filter-pill"     data-f="issues">Issues (${withIssues})</button>
+      <button class="filter-pill"     data-f="ok">Correct (${okCount})</button>
+    </div>
+  `;
+
+  for (const r of results.checked) {
+    const hasIssues  = r.issues.length > 0;
+    const cardClass  = hasIssues ? 'card-warn' : 'card-ok';
+    const dotClass   = hasIssues ? 'dot-warn' : 'dot-ok';
+    const dotSymbol  = hasIssues ? '✕' : '✓';
+    const badge      = typeBadgeLabel(r.text, style);
+    const issuesHTML = hasIssues
+      ? `<div class="ref-issues"><ul class="issue-list">${r.issues.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`
+      : '';
+
+    html += `
+      <div class="ref-card ${cardClass}" data-status="${hasIssues ? 'issues' : 'ok'}">
+        <div class="ref-card-hdr">
+          <div class="status-dot ${dotClass}">${dotSymbol}</div>
+          <div class="ref-text">${esc(r.text)}</div>
+          <div class="type-badge">${esc(badge)}</div>
+        </div>
+        ${issuesHTML}
+      </div>
+    `;
+  }
+
+  html += `
+    <div class="alert alert-warn" style="margin-top:1rem;font-size:.8rem;">
+      <strong>Note:</strong> Automated checking cannot catch all errors and may occasionally produce false positives.
+      Always do a manual check against the style guide, and consult your tutor if you are unsure.
+    </div>
+  `;
+
+  refListCont.innerHTML = html;
+
+  // ── Filter pills ──
+  refListCont.querySelectorAll('.filter-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      refListCont.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      const f = btn.dataset.f;
+      refListCont.querySelectorAll('.ref-card').forEach(card => {
+        card.style.display = (f === 'all' || card.dataset.status === f) ? '' : 'none';
+      });
+    });
+  });
+}
+</script>
+</body>
+</html>
