@@ -937,19 +937,40 @@ function extractReferences(bibText, style) {
   return refs;
 }
 
+// Plausible publication year range: 1400–2099
+const YEAR_RE    = /\b(?:1[4-9]\d{2}|20\d{2})[a-z]?\b/;
+// Year explicitly wrapped in parentheses — the canonical Harvard marker
+const PAREN_YEAR = /\((?:1[4-9]\d{2}|20\d{2})[a-z]?\)|\(n\.d\.\)/;
+
 function looksLikeRefStart(line) {
   if (!line || line.length < 4) return false;
-  if (/^\[\d+\]/.test(line))                             return true; // [1] IEEE / Vancouver
-  if (/^\d+\.\s+[A-Z]/.test(line))                       return true; // 1. Vancouver
-  // Allow digits in acronyms: SMITH, W3C, HTML5, CSS3 — [A-Z][A-Z0-9\-]{1,}
-  // Also require a comma within the first 35 chars OR a year in the line, so that
-  // all-caps title continuations like "USEFUL IN DESIGNING FOR HEALTH?" are not
-  // mistaken for a new reference entry.
-  if (/^[A-Z][A-Z0-9\-]{1,}[,\s]/.test(line) &&
-      (line.slice(0, 35).includes(',') || /\d{4}/.test(line))) return true; // SMITH, / W3C 2024...
-  if (/^[A-Z][a-z\-']+,\s+[A-Z]/.test(line) && /\d{4}/.test(line)) return true; // Smith, J. 2023
-  if (/^Anon[.\s]/.test(line))                           return true;
-  if (/^[A-Z][a-z].{5,},\s+\d{4}/.test(line))           return true; // Title-first (Acts, Films)
+  if (/^\[\d+\]/.test(line))       return true;  // [1] IEEE / Vancouver
+  if (/^\d+\.\s+[A-Z]/.test(line)) return true;  // 1. Vancouver
+
+  // ── All-caps author or org (EHU Harvard / APA all-caps variant) ────────────
+  // Anchors: digits allowed in acronyms (W3C, HTML5).
+  if (/^[A-Z][A-Z0-9\-]{1,}[,\s]/.test(line)) {
+    // Case A — canonical Harvard: year in parentheses somewhere in the line.
+    //   Catches: SMITH, J. (2023) / W3C (2023) / DEPARTMENT OF HEALTH (2020) / STATCOUNTER (n.d.)
+    //   Rejects: AVAILABLE AT: https://…/2026/  (year in URL, not in parens)
+    //            HMSO, London 2020               (publisher continuation line)
+    if (PAREN_YEAR.test(line)) return true;
+    // Case B — malformed Harvard (student omitted parens around year):
+    //   SMITH, J. 2023 — comma immediately followed by a dotted initial (e.g. J. or A.B.).
+    //   Rejects: HMSO, London 2020  (full word after comma, not a dotted initial)
+    //   Rejects: HMSO, 2020         (digit follows comma, not an initial)
+    if (/^[A-Z][A-Z0-9\-]{1,},\s+[A-Z]\./.test(line) && YEAR_RE.test(line)) return true;
+  }
+
+  // ── Mixed-case author: Smith, J. (2023) ────────────────────────────────────
+  if (/^[A-Z][a-z\-']+,\s+[A-Z]/.test(line) && YEAR_RE.test(line)) return true;
+
+  if (/^Anon[.\s]/.test(line)) return true;
+
+  // ── Title-first (legislation, films): Data Protection Act (2018) ───────────
+  if (/^[A-Z][a-z].{5,},\s+(?:1[4-9]\d{2}|20\d{2})/.test(line)) return true; // comma then year
+  if (/^[A-Z][a-z].{5,}\((?:1[4-9]\d{2}|20\d{2})/.test(line))   return true; // paren year
+
   return false;
 }
 
