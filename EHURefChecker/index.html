@@ -950,14 +950,20 @@ function extractReferences(bibText, style) {
   // For numbered styles (IEEE, Vancouver) some PDFs emit '[' and '1]' as
   // separate text items at slightly different Y positions, landing on separate
   // lines. Re-join them here before splitting into entries.
-  const isNumbered = ['ieee', 'vancouver'].includes(style);
+  const wantsNumbered = ['ieee', 'vancouver'].includes(style);
   let cleaned = bibText.replace(/\f/g, '\n');
-  if (isNumbered) {
-    // Merge cases like "[\n1] " → "[1] "
-    cleaned = cleaned.replace(/\[\n(\d+\])/g, '[$1');
+  if (wantsNumbered) {
+    cleaned = cleaned.replace(/\[\n(\d+\])/g, '[$1');  // merge split [N] markers
   }
 
   const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // If the user selected IEEE/Vancouver but the bibliography contains no [N] or
+  // "N. " markers at all, the document is probably formatted in a different style.
+  // Fall back to general splitting so the refs still appear individually, and let
+  // checkAll flag the mismatch.
+  const hasNumberedMarkers = lines.some(l => /^\[\d+\]/.test(l) || /^\d+\.\s+[A-Z]/.test(l));
+  const isNumbered = wantsNumbered && hasNumberedMarkers;
 
   const refs  = [];
   let current = '';
@@ -978,7 +984,6 @@ function extractReferences(bibText, style) {
     if (looksLikeSectionSkip(line)) continue;
 
     if (current.length > 0 && isNewEntry(line)) {
-      // 2000-char cap — long IEEE entries with many authors need the extra room
       refs.push(current.trim().slice(0, 2000));
       current = line;
     } else {
@@ -1096,11 +1101,13 @@ function checkAll(references, citations, bibText, bibFound, style) {
   const uncited  = []; // in bib, not in text
 
   if (['ieee', 'vancouver'].includes(style)) {
-    const total = checked.length;
+    // Use key-based lookup (num_1, num_2 …) so that refs are matched by their
+    // actual [N] number rather than by array position.  Position-based indexing
+    // breaks whenever two-column rendering extracts refs out of numeric order.
     for (const [k, c] of citations) {
-      const n = c.number;
-      if (n >= 1 && n <= total) {
-        checked[n - 1].cited = true;
+      const refK = 'num_' + c.number;
+      if (keyIdx.has(refK)) {
+        for (const idx of keyIdx.get(refK)) checked[idx].cited = true;
       } else {
         orphaned.push(c);
       }
@@ -1139,7 +1146,20 @@ function checkAll(references, citations, bibText, bibFound, style) {
     }
   }
 
-  return { checked, citations, orphaned, uncited, orderIssues, duplicateKeys, bibFound };
+  // ── Style mismatch detection ─────────────────────────────────
+  // Flag when the selected style clearly doesn't match the document's ref format.
+  //   • IEEE/Vancouver selected but no [N] numbered refs found  → wrong style
+  //   • Author-date style selected but refs are all numbered    → wrong style
+  let styleMismatch = null;
+  const refsAreNumbered  = checked.some(r => r.ki.isNum);
+  const styleIsNumbered  = ['ieee', 'vancouver'].includes(style);
+  if (styleIsNumbered && checked.length > 0 && !refsAreNumbered) {
+    styleMismatch = `You selected <strong>${style.toUpperCase()}</strong> but the reference list contains no [N] numbered entries — the document appears to use an author-date style (e.g. APA or Harvard). Please re-run with the correct style selected.`;
+  } else if (!styleIsNumbered && checked.length > 0 && refsAreNumbered) {
+    styleMismatch = `You selected an author-date style but the reference list appears to use numbered references (e.g. [1], [2] …). Please re-run with <strong>IEEE</strong> or <strong>Vancouver</strong> selected.`;
+  }
+
+  return { checked, citations, orphaned, uncited, orderIssues, duplicateKeys, bibFound, styleMismatch };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1625,6 +1645,16 @@ function renderResults(results, style, bibFound) {
   `;
 
   let alertsHTML = '';
+
+  // ── Style mismatch — show this first, it explains everything else ──
+  if (results.styleMismatch) {
+    alertsHTML += `
+      <div class="alert alert-err">
+        <h4>⚠ Style mismatch detected</h4>
+        <p>${results.styleMismatch}</p>
+      </div>
+    `;
+  }
 
   // ── No bibliography detected ──
   if (!bibFound) {
