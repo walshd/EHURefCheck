@@ -756,9 +756,17 @@ function checkAll(references, citations, bibText, bibFound, style) {
     return { text, ki, issues, cited: false };
   });
 
-  // Build a key→index map for cross-referencing
+  // Build a key→[indices] map — multiple refs can share a key (same author, same year)
   const keyIdx = new Map();
-  checked.forEach((r, i) => keyIdx.set(r.ki.key, i));
+  checked.forEach((r, i) => {
+    if (!keyIdx.has(r.ki.key)) keyIdx.set(r.ki.key, []);
+    keyIdx.get(r.ki.key).push(i);
+  });
+
+  // Detect duplicate author+year in bibliography (student should use 2026a, 2026b, etc.)
+  const duplicateKeys = [...keyIdx.entries()]
+    .filter(([, idxArr]) => idxArr.length > 1)
+    .map(([key, idxArr]) => ({ key, count: idxArr.length, ki: checked[idxArr[0]].ki }));
 
   const orphaned = []; // in text, not in bib
   const uncited  = []; // in bib, not in text
@@ -776,7 +784,10 @@ function checkAll(references, citations, bibText, bibFound, style) {
   } else {
     for (const [k, c] of citations) {
       if (keyIdx.has(k)) {
-        checked[keyIdx.get(k)].cited = true;
+        // Mark ALL refs sharing this key as cited
+        for (const idx of keyIdx.get(k)) {
+          checked[idx].cited = true;
+        }
       } else {
         // Partial match on surname alone?
         const surnameOnly = k.split('_')[0];
@@ -804,7 +815,7 @@ function checkAll(references, citations, bibText, bibFound, style) {
     }
   }
 
-  return { checked, citations, orphaned, uncited, orderIssues, bibFound };
+  return { checked, citations, orphaned, uncited, orderIssues, duplicateKeys, bibFound };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1287,6 +1298,21 @@ function renderResults(results, style, bibFound) {
     alertsHTML += `
       <div class="alert alert-warn">
         <h4>⚠ Possible alphabetical ordering issues (${results.orderIssues.length})</h4>
+        <ul>${items}</ul>
+      </div>
+    `;
+  }
+
+  // ── Duplicate author+year ──
+  const styleSuffix = ['ehu_harvard','harvard','apa','chicago'].includes(style);
+  if (styleSuffix && results.duplicateKeys && results.duplicateKeys.length > 0) {
+    const items = results.duplicateKeys.map(d => {
+      const label = d.ki.surname ? `${d.ki.surname} (${d.ki.year})` : d.key;
+      return `<li><strong>${esc(label)}</strong> — ${d.count} references share this author and year. In ${esc(style === 'ehu_harvard' ? 'EHU Harvard' : 'this style')}, distinguish them with lowercase letter suffixes: ${d.ki.year}a, ${d.ki.year}b, ${d.ki.year}c — both in the reference list and in every in-text citation.</li>`;
+    }).join('');
+    alertsHTML += `
+      <div class="alert alert-warn">
+        <h4>ℹ Multiple references share the same author and year (${results.duplicateKeys.length})</h4>
         <ul>${items}</ul>
       </div>
     `;
