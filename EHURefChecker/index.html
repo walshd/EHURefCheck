@@ -601,12 +601,20 @@ function extractAuthorDate(text, map) {
     }
   }
 
-  // Narrative: Smith (2023), LinkedIn (2026), Smith et al. (2023), Smith and Jones (2023)
-  // Use [\w\-']+ to handle mixed-case org/brand names without cutting at internal capitals
-  const narrPat = /([A-Z][\w\-']+)(?:\s+et\s+al\.)?(?:\s+and\s+[A-Z][\w\-']+(?:\s+and\s+[A-Z][\w\-']+)*)?\s+\((\d{4}[a-z]?|n\.d\.)\)/g;
+  // Narrative citations — handles all of:
+  //   Single name:         Smith (2023)
+  //   Mixed-case brand:    LinkedIn (2026), W3C (2023)
+  //   Multi-word org:      Stack Overflow (2024), Nielsen Norman Group (2019)
+  //   Two/three authors:   Smith and Jones (2023)
+  //   Four+ authors:       Smith et al. (2023)
+  // Strategy: greedily capture the longest run of capitalised words (allowing
+  // "and" and "et al." as connectors), then use only the first word as the key
+  // so that "Stack Overflow (2024)" → key "stack_2024", matching "STACK OVERFLOW, 2024."
+  const narrPat = /([A-Z][\w\-']+(?:\s+(?:and\s+[A-Z][\w\-']+|et\s+al\.|[A-Z][\w\-']+))*)\s+\((\d{4}[a-z]?|n\.d\.)\)/g;
 
   while ((m = narrPat.exec(text)) !== null) {
-    addCit(map, normalise(m[1]) + '_' + m[2], m[1], m[2]);
+    const firstWord = m[1].split(/\s+/)[0];
+    addCit(map, normalise(firstWord) + '_' + m[2], firstWord, m[2]);
   }
 }
 
@@ -667,6 +675,11 @@ const SECTION_END_PATTERNS = [
   /^index\b/i,
   /^figure\s+\d+/i,
   /^table\s+\d+/i,
+  // Document footers / total-reference-count lines
+  /^this\s+document\s+contains/i,
+  /^total\s+number\s+of\s+references/i,
+  // Standalone page numbers (lone digits on a line)
+  /^\d{1,3}$/,
 ];
 
 function looksLikeSectionEnd(line) {
@@ -702,7 +715,8 @@ function looksLikeRefStart(line) {
   if (!line || line.length < 4) return false;
   if (/^\[\d+\]/.test(line))                             return true; // [1] IEEE / Vancouver
   if (/^\d+\.\s+[A-Z]/.test(line))                       return true; // 1. Vancouver
-  if (/^[A-Z]{2,}[,\s]/.test(line))                      return true; // SMITH, J. — Harvard caps
+  // Allow digits in acronyms: SMITH, W3C, HTML5, CSS3 — [A-Z][A-Z0-9\-]{1,}
+  if (/^[A-Z][A-Z0-9\-]{1,}[,\s]/.test(line))           return true; // SMITH, / W3C WEB...
   if (/^[A-Z][a-z\-']+,\s+[A-Z]/.test(line) && /\d{4}/.test(line)) return true; // Smith, J. 2023
   if (/^Anon[.\s]/.test(line))                           return true;
   if (/^[A-Z][a-z].{5,},\s+\d{4}/.test(line))           return true; // Title-first (Acts, Films)
@@ -713,7 +727,7 @@ function looksLikeRefStart(line) {
 // Extract cross-ref key from a bibliography entry
 // ─────────────────────────────────────────────────────────────
 function refKey(text, style) {
-  // Numbered
+  // Numbered references ([1] IEEE / Vancouver, or 1. Vancouver)
   let m = text.match(/^\[(\d+)\]/);
   if (m) return { key: 'num_' + m[1], number: +m[1], isNum: true };
   m = text.match(/^(\d+)\.\s/);
@@ -722,27 +736,22 @@ function refKey(text, style) {
   const yearM = text.match(/\b(\d{4}[a-z]?)\b/);
   const year  = yearM ? yearM[1] : 'nd';
 
-  // ALL-CAPS name (single or multi-word org): SMITH, J. or FIFTH INGENIUM, 2026. or LINKEDIN, 2026.
-  // Capture everything up to the first comma, then use only the first word as the key
-  // so that "Fifth Ingenium" (citation) and "FIFTH INGENIUM" (ref) both produce key "fifth_<year>".
-  m = text.match(/^([A-Z][A-Z\s\-'&]+?),/);
-  if (m) {
-    const firstWord = m[1].trim().split(/\s+/)[0];
-    return { key: normalise(firstWord) + '_' + year, surname: firstWord, year };
-  }
-
-  // Sentence-case surname: Smith, J.
-  m = text.match(/^([A-Z][a-z\-']+),\s+[A-Z]/);
-  if (m) return { key: normalise(m[1]) + '_' + year, surname: m[1], year };
-
   // Anon
   if (/^Anon/i.test(text)) return { key: 'anon_' + year, surname: 'Anon', year };
 
-  // Title-first: first word
-  m = text.match(/^([A-Z][a-z]+)/);
-  if (m) return { key: normalise(m[1]) + '_' + year, surname: m[1], year };
+  // ── Robust first-token approach ──────────────────────────────
+  // Take the very first whitespace-delimited token and strip trailing punctuation.
+  // This handles all author forms without breaking on diacritics, digits in
+  // acronyms (W3C, HTML5), or multi-word org names (FIFTH INGENIUM, VEPS ¨AL ¨AINEN).
+  // The citation extractor also always uses just the first word of a multi-word org,
+  // so both sides of the cross-reference produce a consistent key.
+  m = text.match(/^([A-Z]\S*)/);
+  if (m) {
+    const firstToken = m[1].replace(/[,;.:]+$/, ''); // strip trailing punctuation
+    return { key: normalise(firstToken) + '_' + year, surname: firstToken, year };
+  }
 
-  return { key: normalise(text.slice(0, 12)) + '_' + year, year };
+  return { key: normalise(text.slice(0, 10)) + '_' + year, year };
 }
 
 // ─────────────────────────────────────────────────────────────
