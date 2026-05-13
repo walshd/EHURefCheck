@@ -6,8 +6,10 @@
   <title>EHU Reference Checker</title>
   <style>
     :root {
-      --primary:       #1a3a5c;
-      --primary-light: #2558a0;
+      /* EHU brand palette */
+      --primary:       #00573f;   /* EHU green */
+      --primary-dark:  #003d2c;   /* darker green for hover */
+      --primary-light: #007a59;   /* mid green */
       --accent:        #c0392b;
       --success:       #2e7d32;
       --warning-col:   #e65100;
@@ -36,9 +38,24 @@
       padding: 1.25rem 1.5rem;
       box-shadow: 0 2px 6px rgba(0,0,0,.25);
     }
-    header .inner { max-width: 900px; margin: 0 auto; }
-    header h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; }
-    header p  { font-size: .85rem; opacity: .78; margin-top: .2rem; }
+    header .inner {
+      max-width: 900px; margin: 0 auto;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    header .ehu-badge {
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 4px;
+      padding: .25rem .6rem;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    header .hdr-text { flex: 1; }
+    header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
+    header p  { font-size: .82rem; opacity: .78; margin-top: .15rem; }
 
     /* ── Layout ── */
     .container {
@@ -67,7 +84,7 @@
       position: relative;
     }
     .upload-zone:hover,
-    .upload-zone.drag-over { border-color: var(--primary); background: #eef2ff; }
+    .upload-zone.drag-over { border-color: var(--primary); background: #edf7f3; }
     .upload-zone input[type="file"] {
       position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
     }
@@ -103,7 +120,7 @@
       color: var(--text);
       cursor: pointer;
     }
-    select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,58,92,.15); }
+    select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,87,63,.15); }
 
     .btn-primary {
       display: block; width: 100%;
@@ -113,7 +130,7 @@
       font-size: 1rem; font-weight: 700;
       cursor: pointer; transition: background .2s;
     }
-    .btn-primary:hover:not(:disabled) { background: var(--primary-light); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
     .btn-primary:disabled { background: #9e9e9e; cursor: not-allowed; }
 
     .btn-outline {
@@ -130,7 +147,7 @@
     .privacy-notice {
       display: flex; align-items: flex-start; gap: .7rem;
       margin-top: 1.2rem; padding: .85rem 1rem;
-      background: #eef5ff; border: 1px solid #b3cfee;
+      background: #edf7f3; border: 1px solid #a5d6c4;
       border-radius: var(--radius);
       font-size: .8rem; color: var(--primary);
     }
@@ -263,14 +280,67 @@
       .stat-grid { grid-template-columns: repeat(2, 1fr); }
       .results-hdr { flex-direction: column; align-items: flex-start; gap: .75rem; }
     }
+
+    /* ── Clickable links inside reference cards ── */
+    .ref-link {
+      color: var(--primary);
+      text-decoration: underline;
+      text-decoration-color: rgba(0,87,63,.35);
+      word-break: break-all;
+    }
+    .ref-link:hover { text-decoration-color: var(--primary); }
+
+    /* ── Export button ── */
+    .btn-export {
+      display: inline-flex; align-items: center; gap: .4rem;
+      padding: .45rem .95rem;
+      font-size: .82rem; font-weight: 600;
+      border: 1.5px solid var(--primary);
+      border-radius: 6px;
+      background: #fff; color: var(--primary);
+      cursor: pointer; transition: background .15s, color .15s;
+    }
+    .btn-export:hover { background: var(--primary); color: #fff; }
+
+    /* ── Print / PDF export styles ── */
+    @media print {
+      body { background: #fff; font-size: 10pt; color: #000; }
+      header, #upload-section, #loading-section, .results-hdr, .filter-bar,
+      .btn-outline, .btn-export { display: none !important; }
+      #results-section { display: block !important; }
+      .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; margin-bottom: 1rem; }
+      .stat-box { border: 1px solid #ccc; border-radius: 4px; padding: .5rem; text-align: center; break-inside: avoid; }
+      .stat-box .num { font-size: 1.4rem; font-weight: 700; }
+      .stat-box .lbl { font-size: .7rem; }
+      .stat-box.ok   { background: #e8f5e9; }
+      .stat-box.bad  { background: #ffebee; }
+      .stat-box.info { background: #e3f2fd; }
+      .alert { border: 1px solid #ccc; border-radius: 4px; padding: .5rem .75rem; margin-bottom: .75rem; break-inside: avoid; }
+      .alert-warn { border-color: #e65100; background: #fff3e0; }
+      .alert-info { border-color: #0277bd; background: #e1f5fe; }
+      .ref-card { border: 1px solid #ccc; border-radius: 4px; padding: .5rem .75rem; margin-bottom: .5rem; break-inside: avoid; }
+      .card-ok   { border-color: #4caf50; background: #f1f8f1; }
+      .card-warn { border-color: #e65100; background: #fff8f5; }
+      .ref-card-hdr { display: flex; align-items: flex-start; gap: .4rem; }
+      .status-dot { flex-shrink: 0; width: 1.2em; text-align: center; font-weight: 700; }
+      .dot-ok   { color: #2e7d32; }
+      .dot-warn { color: #b71c1c; }
+      .type-badge { font-size: .65rem; border: 1px solid #ccc; border-radius: 3px; padding: 0 .3rem; white-space: nowrap; margin-left: auto; }
+      .issue-list { margin: .3rem 0 0 1.5rem; font-size: .8rem; color: #b71c1c; }
+      .export-title { display: block !important; font-size: 1rem; font-weight: 700; margin-bottom: .75rem; border-bottom: 2px solid #1a3a5c; padding-bottom: .3rem; }
+    }
+    .export-title { display: none; }
   </style>
 </head>
 <body>
 
 <header>
   <div class="inner">
-    <h1>📚 EHU Reference Checker</h1>
-    <p>Automated reference and citation checking for academic submissions</p>
+    <span class="ehu-badge">Edge Hill<br>University</span>
+    <div class="hdr-text">
+      <h1>Reference Checker</h1>
+      <p>Automated reference and citation checking — all processing happens in your browser</p>
+    </div>
   </div>
 </header>
 
@@ -335,9 +405,13 @@
   <section id="results-section">
     <div class="results-hdr">
       <h2>Results</h2>
-      <button class="btn-outline" id="check-another-btn">↩ Check Another Document</button>
+      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+        <button class="btn-export" id="export-pdf-btn" title="Save results as PDF">⬇ Export PDF</button>
+        <button class="btn-outline" id="check-another-btn">↩ Check Another Document</button>
+      </div>
     </div>
 
+    <div class="export-title" id="export-title"></div>
     <div class="stat-grid" id="stat-grid"></div>
     <div id="alerts-container"></div>
     <div id="ref-list-container"></div>
@@ -396,6 +470,7 @@ fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.tar
 clearBtn.addEventListener('click', e => { e.stopPropagation(); clearFile(); });
 checkAnotherBtn.addEventListener('click', resetToUpload);
 submitBtn.addEventListener('click', runCheck);
+document.getElementById('export-pdf-btn').addEventListener('click', exportPDF);
 
 function setFile(file) {
   if (!/\.(docx|pdf)$/i.test(file.name)) {
@@ -420,6 +495,22 @@ function resetToUpload() {
   uploadSection.style.display = '';
   loadingSection.classList.remove('show');
   resultsSection.classList.remove('show');
+}
+
+function exportPDF() {
+  // Set a descriptive title for the print header (hidden on screen, shown in print CSS)
+  const titleEl = document.getElementById('export-title');
+  if (titleEl) {
+    const fname = selectedFile ? selectedFile.name : 'document';
+    const style = document.getElementById('ref-style');
+    const styleName = style ? style.options[style.selectedIndex].text : '';
+    titleEl.textContent =
+      'EHU Reference Checker — ' + fname + ' (' + styleName + ') — ' +
+      new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  // Show all ref cards regardless of current filter before printing
+  document.querySelectorAll('.ref-card').forEach(c => (c.style.display = ''));
+  window.print();
 }
 
 function setMsg(msg) { loadingMsg.textContent = msg; }
@@ -504,7 +595,13 @@ async function extractDOCX(file) {
 // ─────────────────────────────────────────────────────────────
 // Document parsing — split body from bibliography
 // ─────────────────────────────────────────────────────────────
-function parseDocument(text) {
+function parseDocument(rawText) {
+  // Normalise form feeds (\x0c / \f) to newlines BEFORE heading detection.
+  // PDF page breaks are encoded as \x0c. JS regex ^ only fires after \n, so
+  // "\x0cReferences" would NOT match /^references?$/im — the heading would be
+  // missed and the fallback heuristic would fire, splitting at the wrong place.
+  const text = rawText.replace(/\f/g, '\n');
+
   const headingPatterns = [
     /^references?\s*$/im,
     /^bibliography\s*$/im,
@@ -512,6 +609,10 @@ function parseDocument(text) {
     /^works?\s+cited\s*$/im,
     /^sources?\s*$/im,
     /^literature\s+cited\s*$/im,
+    // IEEE / numbered-section styles: "V. REFERENCES", "8. References", "IX. Bibliography"
+    /^(?:[IVXivx]+|[0-9]+)\.\s+references?\s*$/im,
+    /^(?:[IVXivx]+|[0-9]+)\.\s+bibliography\s*$/im,
+    /^(?:[IVXivx]+|[0-9]+)\.\s+works?\s+cited\s*$/im,
   ];
 
   let splitAt = -1;
@@ -526,21 +627,32 @@ function parseDocument(text) {
     }
   }
 
-  // Fallback: find a cluster of lines that look like reference entries
+  // Fallback: find a cluster of lines that look like reference entries.
+  // Uses a sliding window rather than requiring consecutive matches, so that
+  // multi-line entries (e.g. IEEE [1]…[2] separated by continuation lines) are
+  // also detected correctly.
   if (splitAt === -1) {
-    const lines  = text.split('\n');
-    let run = 0;
-    for (let i = Math.floor(lines.length * 0.35); i < lines.length; i++) {
+    const lines   = text.split('\n');
+    const start   = Math.floor(lines.length * 0.35);
+    const WINDOW  = 15; // look-back window in lines
+    const THRESH  = 2;  // need this many ref-starts within the window
+    const recent  = []; // circular buffer of recent looksLikeRefStart results
+    for (let i = start; i < lines.length; i++) {
       const l = lines[i].trim();
-      if (looksLikeRefStart(l)) {
-        run++;
-        if (run >= 2) {
-          const before = lines.slice(0, i - 1).join('\n');
-          splitAt    = before.length;
-          headingLen = 0;
-          break;
+      recent.push(looksLikeRefStart(l) ? 1 : 0);
+      if (recent.length > WINDOW) recent.shift();
+      if (recent.reduce((a, b) => a + b, 0) >= THRESH) {
+        // Find the first ref-start line in this window to use as the split point
+        const winStart = Math.max(start, i - WINDOW + 1);
+        let firstRef   = winStart;
+        for (let j = winStart; j <= i; j++) {
+          if (looksLikeRefStart(lines[j].trim())) { firstRef = j; break; }
         }
-      } else { run = 0; }
+        const before = lines.slice(0, firstRef).join('\n');
+        splitAt    = before.length;
+        headingLen = 0;
+        break;
+      }
     }
   }
 
@@ -575,13 +687,14 @@ function extractCitations(bodyText, style) {
 function extractAuthorDate(text, map) {
   // Parenthetical: (Smith, 2023), (Smith and Jones, 2023), (Smith et al., 2023: 45)
   // Multiple: (Smith, 2023; Jones, 2024)
-  const parenPat = /\(([^)]{3,120}(?:\d{4}|n\.d\.)[^)]{0,30})\)/g;
+  // Also match nd (without periods) as a no-date indicator
+  const parenPat = /\(([^)]{3,120}(?:\d{4}|n\.d\.|\bnd\b)[^)]{0,30})\)/g;
   let m;
 
   while ((m = parenPat.exec(text)) !== null) {
     for (const part of m[1].split(';')) {
       const t = part.trim();
-      const yearM = t.match(/(\d{4}[a-z]?|n\.d\.)/);
+      const yearM = t.match(/(\d{4}[a-z]?|n\.d\.|\bnd\b)/);
       if (!yearM) continue;
       const year = yearM[1];
       // Use [\w\-']+ so mixed-case names like "LinkedIn" or "GitHub" are captured whole
@@ -589,13 +702,14 @@ function extractAuthorDate(text, map) {
       if (surnameM) {
         // Use only the first word as the key so "Fifth Ingenium" → key "fifth"
         const firstWord = surnameM[1].split(/\s+/)[0];
-        addCit(map, normalise(firstWord) + '_' + year, firstWord, year);
+        // Normalise year so "n.d." and "nd" produce the same key
+        addCit(map, normalise(firstWord) + '_' + normalise(year), firstWord, year);
       } else {
         // Corporate / organisation name that starts with non-letter or unusual casing
         const orgM = t.match(/^([A-Z][A-Za-z &,]+?)(?:,\s*|\s+)(?:\d{4}|n\.d\.)/);
         if (orgM) {
           const firstWord = orgM[1].trim().split(/\s+/)[0];
-          addCit(map, normalise(firstWord) + '_' + year, orgM[1].trim(), year);
+          addCit(map, normalise(firstWord) + '_' + normalise(year), orgM[1].trim(), year);
         }
       }
     }
@@ -610,11 +724,12 @@ function extractAuthorDate(text, map) {
   // Strategy: greedily capture the longest run of capitalised words (allowing
   // "and" and "et al." as connectors), then use only the first word as the key
   // so that "Stack Overflow (2024)" → key "stack_2024", matching "STACK OVERFLOW, 2024."
-  const narrPat = /([A-Z][\w\-']+(?:\s+(?:and\s+[A-Z][\w\-']+|et\s+al\.|[A-Z][\w\-']+))*)\s+\((\d{4}[a-z]?|n\.d\.)\)/g;
+  const narrPat = /([A-Z][\w\-']+(?:\s+(?:and\s+[A-Z][\w\-']+|et\s+al\.|[A-Z][\w\-']+))*)\s+\((\d{4}[a-z]?|n\.d\.|\bnd\b)\)/g;
 
   while ((m = narrPat.exec(text)) !== null) {
     const firstWord = m[1].split(/\s+/)[0];
-    addCit(map, normalise(firstWord) + '_' + m[2], firstWord, m[2]);
+    // Normalise year so "n.d." and "nd" produce the same key
+    addCit(map, normalise(firstWord) + '_' + normalise(m[2]), firstWord, m[2]);
   }
 }
 
@@ -731,7 +846,11 @@ function looksLikeRefStart(line) {
   if (/^\[\d+\]/.test(line))                             return true; // [1] IEEE / Vancouver
   if (/^\d+\.\s+[A-Z]/.test(line))                       return true; // 1. Vancouver
   // Allow digits in acronyms: SMITH, W3C, HTML5, CSS3 — [A-Z][A-Z0-9\-]{1,}
-  if (/^[A-Z][A-Z0-9\-]{1,}[,\s]/.test(line))           return true; // SMITH, / W3C WEB...
+  // Also require a comma within the first 35 chars OR a year in the line, so that
+  // all-caps title continuations like "USEFUL IN DESIGNING FOR HEALTH?" are not
+  // mistaken for a new reference entry.
+  if (/^[A-Z][A-Z0-9\-]{1,}[,\s]/.test(line) &&
+      (line.slice(0, 35).includes(',') || /\d{4}/.test(line))) return true; // SMITH, / W3C 2024...
   if (/^[A-Z][a-z\-']+,\s+[A-Z]/.test(line) && /\d{4}/.test(line)) return true; // Smith, J. 2023
   if (/^Anon[.\s]/.test(line))                           return true;
   if (/^[A-Z][a-z].{5,},\s+\d{4}/.test(line))           return true; // Title-first (Acts, Films)
@@ -748,8 +867,12 @@ function refKey(text, style) {
   m = text.match(/^(\d+)\.\s/);
   if (m) return { key: 'num_' + m[1], number: +m[1], isNum: true };
 
-  const yearM = text.match(/\b(\d{4}[a-z]?)\b/);
-  const year  = yearM ? yearM[1] : 'nd';
+  // Match a 4-digit year, n.d. (with periods), or nd (without periods) as the year
+  const yearM = text.match(/\b(\d{4}[a-z]?)\b/)
+             || text.match(/\bn\.d\.\b/)
+             || text.match(/[\s(,]\bnd\b[)\s.,]/);
+  // Normalise year: "n.d." → "nd", "2023" → "2023", " nd " → "nd", missing → "nd"
+  const year  = yearM ? normalise(yearM[0]) : 'nd';
 
   // Anon
   if (/^Anon/i.test(text)) return { key: 'anon_' + year, surname: 'Anon', year };
@@ -925,6 +1048,26 @@ function detectEHUType(text) {
 
 function validateEHU(text, issues) {
   const type = detectEHUType(text);
+
+  // ── 0. Author identifiable ──
+  // If the entry doesn't start with a recognisable author (all-caps word, Title-first
+  // format, Anon, or a numbered marker), flag it — this typically means a title
+  // continuation was misidentified as a separate reference entry.
+  if (!isEHUTitleFirst(text)) {
+    const hasAuthor = /^\[\d+\]/.test(text)      // numbered
+      || /^\d+\.\s/.test(text)                   // numbered alt
+      || /^Anon[.\s]/i.test(text)                // Anon
+      || /^[A-Z][A-Z0-9\-']{1,}[,\s]/.test(text) && (text.slice(0,35).includes(',') || /\d{4}/.test(text)) // CAPS surname/org with comma or year
+      || /^[A-Z][a-z\-']+,\s+[A-Z]/.test(text); // Mixed-case surname (Smith, J.)
+    if (!hasAuthor) {
+      issues.push(
+        'No author could be identified at the start of this entry. ' +
+        'Check that each reference begins with the author\'s surname in full CAPITALS ' +
+        '(e.g. SMITH, J.) or, for title-first references (Acts, films, etc.), that the title is correctly formatted. ' +
+        'This entry may be a continuation of the previous reference rather than a separate entry.'
+      );
+    }
+  }
 
   // ── 1. Author format (caps) ──
   if (!isEHUTitleFirst(text)) {
@@ -1256,6 +1399,29 @@ function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Convert http(s) URLs and DOIs in a reference string into clickable links.
+// The string must already be HTML-escaped before calling this.
+function linkify(escapedText) {
+  // DOI pattern — match doi:10.xxxx/... or https://doi.org/10.xxxx/...
+  // We handle both forms and normalise to a https://doi.org/ link.
+  let out = escapedText;
+
+  // doi: prefix (bare)
+  out = out.replace(
+    /\bdoi:\s*(10\.\S+?)(?=[,\s)\]<]|$)/gi,
+    (_, doi) => `<a href="https://doi.org/${doi}" target="_blank" rel="noopener" class="ref-link">doi:${doi}</a>`
+  );
+
+  // Full https://doi.org/... URLs (catches if already written as a URL)
+  // and general http(s) URLs — handle both in one pass, longest-match first
+  out = out.replace(
+    /https?:\/\/[^\s,)\]<"]+/gi,
+    url => `<a href="${url}" target="_blank" rel="noopener" class="ref-link">${url}</a>`
+  );
+
+  return out;
+}
+
 function renderResults(results, style, bibFound) {
   const statGrid      = document.getElementById('stat-grid');
   const alertsCont    = document.getElementById('alerts-container');
@@ -1394,7 +1560,7 @@ function renderResults(results, style, bibFound) {
       <div class="ref-card ${cardClass}" data-status="${hasIssues ? 'issues' : 'ok'}">
         <div class="ref-card-hdr">
           <div class="status-dot ${dotClass}">${dotSymbol}</div>
-          <div class="ref-text">${esc(r.text)}</div>
+          <div class="ref-text">${linkify(esc(r.text))}</div>
           <div class="type-badge">${esc(badge)}</div>
         </div>
         ${issuesHTML}
