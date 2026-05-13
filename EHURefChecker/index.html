@@ -855,7 +855,10 @@ function extractAuthorDate(text, map) {
   // Strategy: greedily capture the longest run of capitalised words (allowing
   // "and" and "et al." as connectors), then use only the first word as the key
   // so that "Stack Overflow (2024)" → key "stack_2024", matching "STACK OVERFLOW, 2024."
-  const narrPat = /([A-Z][\w\-']+(?:\s+(?:and\s+[A-Z][\w\-']+|et\s+al\.|[A-Z][\w\-']+))*)\s+\(((?:1[4-9]\d{2}|20\d{2})[a-z]?|n\.d\.|\bnd\b)\)/g;
+  // Negative lookbehind: skip matches where the capitalised word is preceded by a
+  // determiner/preposition — those are noun phrases ("the Web (2026)"), not citations.
+  // Modern JS supports variable-length lookbehinds in all evergreen browsers.
+  const narrPat = /(?<!(?:the|The|a|A|an|An|this|This|these|These|their|Their|its|Its|our|Our|of|on|in|at|by|as|is|are|was|were|for|or)\s)([A-Z][\w\-']+(?:\s+(?:and\s+[A-Z][\w\-']+|et\s+al\.|[A-Z][\w\-']+))*)\s+\(((?:1[4-9]\d{2}|20\d{2})[a-z]?|n\.d\.|\bnd\b)\)/g;
 
   while ((m = narrPat.exec(text)) !== null) {
     // Strip leading articles before keying so "The Organisation (2026)" keys on "organisation"
@@ -974,7 +977,7 @@ function extractReferences(bibText, style) {
   // "Liu, W. Chen and X. Zhang, 'title,' IEEE Trans., 2023."
   function isNewEntry(line) {
     if (isNumbered) {
-      return /^\[\d+\]/.test(line) || /^\d+\.\s+[A-Z]/.test(line);
+      return /^\[\d+\]/.test(line) || /^\d{1,3}\.\s+[A-Z]/.test(line);
     }
     return looksLikeRefStart(line);
   }
@@ -992,6 +995,36 @@ function extractReferences(bibText, style) {
   }
   if (current.trim().length > 5) refs.push(current.trim().slice(0, 2000));
 
+  // ── Post-extraction split pass ──────────────────────────────────────────────
+  // Two-column PDFs sometimes concatenate right-column entries onto the end of
+  // left-column entries (e.g. "CNN, 2026. … CODEFINITY, n.d. History…").
+  // Slide through each entry looking for a word boundary (after char 40) where
+  // the remaining text triggers looksLikeRefStart, then split there.
+  // Only applies to author-date styles; numbered styles already split precisely.
+  if (!isNumbered) {
+    const splitRefs = [];
+    for (const refText of refs) {
+      const parts = [];
+      let body  = refText;
+      let from  = 40; // skip at least the entry's own opening
+      while (from < body.length) {
+        const sp = body.indexOf(' ', from);
+        if (sp < 0) break;
+        const tail = body.slice(sp + 1);
+        if (looksLikeRefStart(tail)) {
+          parts.push(body.slice(0, sp).trim().slice(0, 2000));
+          body = tail;
+          from = 40;
+        } else {
+          from = sp + 1;
+        }
+      }
+      parts.push(body.trim().slice(0, 2000));
+      for (const p of parts) { if (p.length > 5) splitRefs.push(p); }
+    }
+    return splitRefs;
+  }
+
   return refs;
 }
 
@@ -1002,8 +1035,8 @@ const PAREN_YEAR = /\((?:1[4-9]\d{2}|20\d{2})[a-z]?\)|\(n\.d\.\)/;
 
 function looksLikeRefStart(line) {
   if (!line || line.length < 4) return false;
-  if (/^\[\d+\]/.test(line))       return true;  // [1] IEEE / Vancouver
-  if (/^\d+\.\s+[A-Z]/.test(line)) return true;  // 1. Vancouver
+  if (/^\[\d+\]/.test(line))           return true;  // [1] IEEE / Vancouver
+  if (/^\d{1,3}\.\s+[A-Z]/.test(line)) return true;  // 1. Vancouver (max 3 digits — avoids page/year numbers)
 
   // ── All-caps author or org (EHU Harvard / APA all-caps variant) ────────────
   // Anchors: digits allowed in acronyms (W3C, HTML5).
@@ -1018,6 +1051,18 @@ function looksLikeRefStart(line) {
     //   Rejects: HMSO, London 2020  (full word after comma, not a dotted initial)
     //   Rejects: HMSO, 2020         (digit follows comma, not an initial)
     if (/^[A-Z][A-Z0-9\-]{1,},\s+[A-Z]\./.test(line) && YEAR_RE.test(line)) return true;
+    // Case C — single-token org name with bare year immediately after comma, then period + content:
+    //   CERN, 2026. The birth of the web [online]…
+    //   Rejects: HMSO, London 2020.  (word between comma and year)
+    //   Rejects: HMSO, 2020.         (nothing after the period — continuation fragment)
+    if (/^[A-Z][A-Z0-9\-]{1,},\s+(?:1[4-9]\d{2}|20\d{2})\.\s+\S/.test(line)) return true;
+    // Case D — multi-word all-caps org name with bare year: AL JAZEERA, 2026. Title
+    //   Catches: WEB DESIGN MUSEUM, 2026. / STAT COUNTER, 2026. / MISSIONS DONE, 2025. / UK GOVERNMENT, 2018.
+    //   WORLD WIDE WEB CONSORTIUM, 2024. / GENERAL DATA PROTECTION REGULATION, 2018.
+    if (/^(?:[A-Z][A-Z0-9\-]*\s+)+[A-Z][A-Z0-9\-]*,\s+(?:1[4-9]\d{2}|20\d{2})\.\s+\S/.test(line)) return true;
+    // Case E — org name (single or multi-word) with bare n.d. (student omitted parens):
+    //   CODEFINITY, n.d. History… / REWARDS NETWORK, n.d. Indian Food…
+    if (/^[A-Z][A-Z0-9\-]*(?:\s+[A-Z][A-Z0-9\-]*)*,\s+n\.d\.\s+\S/.test(line)) return true;
   }
 
   // ── Mixed-case author: Smith, J. (2023) ────────────────────────────────────
@@ -1039,7 +1084,7 @@ function refKey(text, style) {
   // Numbered references ([1] IEEE / Vancouver, or 1. Vancouver)
   let m = text.match(/^\[(\d+)\]/);
   if (m) return { key: 'num_' + m[1], number: +m[1], isNum: true };
-  m = text.match(/^(\d+)\.\s/);
+  m = text.match(/^(\d{1,3})\.\s/);
   if (m) return { key: 'num_' + m[1], number: +m[1], isNum: true };
 
   // ── Year extraction ──────────────────────────────────────────
