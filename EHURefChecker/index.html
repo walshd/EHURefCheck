@@ -584,19 +584,26 @@ function extractAuthorDate(text, map) {
       const yearM = t.match(/(\d{4}[a-z]?|n\.d\.)/);
       if (!yearM) continue;
       const year = yearM[1];
-      const surnameM = t.match(/^([A-Z][a-zÀ-ž\-']+)/);
+      // Use [\w\-']+ so mixed-case names like "LinkedIn" or "GitHub" are captured whole
+      const surnameM = t.match(/^([A-Z][\w\-']+)/);
       if (surnameM) {
-        addCit(map, normalise(surnameM[1]) + '_' + year, surnameM[1], year);
+        // Use only the first word as the key so "Fifth Ingenium" → key "fifth"
+        const firstWord = surnameM[1].split(/\s+/)[0];
+        addCit(map, normalise(firstWord) + '_' + year, firstWord, year);
       } else {
-        // Corporate / organisation
+        // Corporate / organisation name that starts with non-letter or unusual casing
         const orgM = t.match(/^([A-Z][A-Za-z &,]+?)(?:,\s*|\s+)(?:\d{4}|n\.d\.)/);
-        if (orgM) addCit(map, normalise(orgM[1]) + '_' + year, orgM[1].trim(), year);
+        if (orgM) {
+          const firstWord = orgM[1].trim().split(/\s+/)[0];
+          addCit(map, normalise(firstWord) + '_' + year, orgM[1].trim(), year);
+        }
       }
     }
   }
 
-  // Narrative: Smith (2023), Smith et al. (2023), Smith and Jones (2023)
-  const narrPat = /([A-Z][a-zÀ-ž\-']+)(?:\s+et\s+al\.)?(?:\s+and\s+[A-Z][a-zÀ-ž\-']+(?:\s+and\s+[A-Z][a-zÀ-ž\-']+)*)?\s+\((\d{4}[a-z]?|n\.d\.)\)/g;
+  // Narrative: Smith (2023), LinkedIn (2026), Smith et al. (2023), Smith and Jones (2023)
+  // Use [\w\-']+ to handle mixed-case org/brand names without cutting at internal capitals
+  const narrPat = /([A-Z][\w\-']+)(?:\s+et\s+al\.)?(?:\s+and\s+[A-Z][\w\-']+(?:\s+and\s+[A-Z][\w\-']+)*)?\s+\((\d{4}[a-z]?|n\.d\.)\)/g;
 
   while ((m = narrPat.exec(text)) !== null) {
     addCit(map, normalise(m[1]) + '_' + m[2], m[1], m[2]);
@@ -649,6 +656,23 @@ function normalise(s) { return s.toLowerCase().replace(/[^a-z0-9]/g, ''); }
 // ─────────────────────────────────────────────────────────────
 // Reference extraction
 // ─────────────────────────────────────────────────────────────
+// Lines that indicate the reference list has ended (appendices, page headers, etc.)
+const SECTION_END_PATTERNS = [
+  /^appendix\b/i,
+  /^appendices\b/i,
+  /^list\s+of\s+(figures|tables|abbreviations)/i,
+  /^acknowledgements?\b/i,
+  /^declaration\b/i,
+  /^glossary\b/i,
+  /^index\b/i,
+  /^figure\s+\d+/i,
+  /^table\s+\d+/i,
+];
+
+function looksLikeSectionEnd(line) {
+  return SECTION_END_PATTERNS.some(p => p.test(line));
+}
+
 function extractReferences(bibText, style) {
   if (!bibText || bibText.trim().length < 5) return [];
 
@@ -657,14 +681,19 @@ function extractReferences(bibText, style) {
   let current  = '';
 
   for (const line of lines) {
+    // Stop if we hit a section that clearly follows the references (appendices, etc.)
+    if (current.length > 0 && looksLikeSectionEnd(line)) break;
+
     if (current.length > 0 && looksLikeRefStart(line)) {
-      refs.push(current.trim());
+      // Cap individual reference length — anything over 600 chars is almost certainly
+      // a parsing artefact (e.g. page content bled in from the PDF).
+      refs.push(current.trim().slice(0, 600));
       current = line;
     } else {
       current += (current ? ' ' : '') + line;
     }
   }
-  if (current.trim().length > 5) refs.push(current.trim());
+  if (current.trim().length > 5) refs.push(current.trim().slice(0, 600));
 
   return refs;
 }
@@ -693,9 +722,14 @@ function refKey(text, style) {
   const yearM = text.match(/\b(\d{4}[a-z]?)\b/);
   const year  = yearM ? yearM[1] : 'nd';
 
-  // CAPS surname: SMITH, J.
-  m = text.match(/^([A-Z][A-Z\-']{1,}),/);
-  if (m) return { key: normalise(m[1]) + '_' + year, surname: m[1], year };
+  // ALL-CAPS name (single or multi-word org): SMITH, J. or FIFTH INGENIUM, 2026. or LINKEDIN, 2026.
+  // Capture everything up to the first comma, then use only the first word as the key
+  // so that "Fifth Ingenium" (citation) and "FIFTH INGENIUM" (ref) both produce key "fifth_<year>".
+  m = text.match(/^([A-Z][A-Z\s\-'&]+?),/);
+  if (m) {
+    const firstWord = m[1].trim().split(/\s+/)[0];
+    return { key: normalise(firstWord) + '_' + year, surname: firstWord, year };
+  }
 
   // Sentence-case surname: Smith, J.
   m = text.match(/^([A-Z][a-z\-']+),\s+[A-Z]/);
@@ -820,18 +854,20 @@ function isEHUTitleFirst(text) {
 
 function detectEHUType(text) {
   const lo = text.toLowerCase();
-  if (lo.includes('[blog online]'))  return 'blog';
-  if (lo.includes('[mobile app'))    return 'app';
-  if (lo.includes('[facebook]'))     return 'facebook';
+  if (lo.includes('[blog online]'))   return 'blog';
+  if (lo.includes('[mobile app'))     return 'app';
+  if (lo.includes('[facebook]'))      return 'facebook';
   if (lo.includes('[x]') && lo.includes('available from:')) return 'twitter';
-  if (lo.includes('[online video]')) return 'online_video';
-  if (lo.includes('[podcast]'))      return 'podcast';
-  if (lo.includes('[pre-print]'))    return 'preprint';
-  if (/\[broadcast\]/.test(lo))      return 'broadcast';
+  if (lo.includes('[online video]'))  return 'online_video';
+  if (lo.includes('[online image]'))  return 'online_image';
+  if (lo.includes('[podcast]'))       return 'podcast';
+  if (lo.includes('[pre-print]'))     return 'preprint';
+  if (/\[broadcast\]/.test(lo))       return 'broadcast';
   if (lo.includes('cochrane database')) return 'cochrane';
-  if (lo.includes('[kindle ebook]')) return 'kindle';
-  if (lo.includes('[ebook]'))        return 'ebook';
-  if (/unpublished thesis|\(phd\)|\(msc\)|\(ma\)|\(mres\)|\(mphil\)/i.test(lo)) return 'thesis';
+  if (lo.includes('[kindle ebook]'))  return 'kindle';
+  if (lo.includes('[ebook]'))         return 'ebook';
+  // Thesis detection: covers EHU format, bachelor's, master's, and common degree abbreviations
+  if (/unpublished\s+thesis|bachelor'?s?\s+thesis|master'?s?\s+thesis|undergraduate\s+dissertation|\(phd\)|\(dphil\)|\(msc\)|\(ma\)|\(mres\)|\(mphil\)|\(ba\)|\(bsc\)/i.test(lo)) return 'thesis';
   if ((lo.includes(' in: ') || lo.includes('\nin: ')) && /\beds?\.\b/.test(lo)) return 'chapter';
   if (lo.includes('conference') && lo.includes(' in: ')) return 'conference';
 
@@ -893,6 +929,7 @@ function validateEHU(text, issues) {
     case 'journal_print':  checkEHUJournalPrint(text, issues); break;
     case 'online_source':
     case 'report_online':  checkEHUOnline(text, issues); break;
+    case 'online_image':   checkEHUOnlineImage(text, issues); break;
     case 'ebook':          checkEHUEbook(text, issues, '[eBook]'); break;
     case 'kindle':         checkEHUEbook(text, issues, '[Kindle eBook]'); break;
     case 'chapter':        checkEHUChapter(text, issues); break;
@@ -942,6 +979,16 @@ function checkEHUJournalPrint(text, issues) {
     issues.push('Journal reference should include page numbers, e.g. pp. 508–513.');
 }
 
+function checkEHUOnlineImage(text, issues) {
+  // ARTIST, Year. Description or title [online image]. Available from: URL [Accessed date].
+  if (!text.includes('[online image]'))
+    issues.push('Online image/artwork reference should include [online image] after the description or title.');
+  if (!text.includes('Available from:'))
+    issues.push('Online image reference should include "Available from:" followed by the URL.');
+  if (!text.includes('[Accessed'))
+    issues.push('Online image reference should include access date, e.g. [Accessed 28 June 2023].');
+}
+
 function checkEHUOnline(text, issues) {
   if (!text.includes('[online]'))
     issues.push('Online reference should include [online] after the title.');
@@ -974,8 +1021,11 @@ function checkEHUChapter(text, issues) {
 }
 
 function checkEHUThesis(text, issues) {
-  if (!/unpublished thesis|\(phd\)|\(msc\)|\(ma\)|\(mres\)|\(mphil\)/i.test(text))
-    issues.push('Thesis reference should specify the level, e.g. Unpublished thesis (PhD).');
+  // EHU Harvard format: AUTHOR, Year. Title. Unpublished thesis (Level). Institution.
+  // We accept a range of valid thesis/dissertation designations.
+  const hasDesignation = /unpublished\s+thesis|bachelor'?s?\s+thesis|master'?s?\s+thesis|undergraduate\s+dissertation|\(phd\)|\(dphil\)|\(msc\)|\(ma\)|\(mres\)|\(mphil\)|\(ba\)|\(bsc\)/i.test(text);
+  if (!hasDesignation)
+    issues.push('Thesis reference should specify the degree level, e.g. Unpublished thesis (PhD). EHU Harvard recommends using "Unpublished thesis (Level)" as the designation.');
 }
 
 function checkEHUBlog(text, issues) {
@@ -1153,7 +1203,7 @@ function validateOSCOLA(text, issues) {
 const TYPE_LABELS = {
   book: 'Book', journal_online: 'Journal (online)', journal_print: 'Journal (print)',
   online_source: 'Online source', report_online: 'Report (online)',
-  website: 'Website', ebook: 'eBook', kindle: 'Kindle eBook',
+  website: 'Website', ebook: 'eBook', kindle: 'Kindle eBook', online_image: 'Image (online)',
   chapter: 'Book chapter', thesis: 'Thesis', blog: 'Blog',
   online_video: 'Online video', conference: 'Conference paper',
   newspaper_print: 'Newspaper (print)', newspaper_online: 'Newspaper (online)',
