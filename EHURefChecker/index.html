@@ -7,9 +7,9 @@
   <style>
     :root {
       /* EHU brand palette */
-      --primary:       #00573f;   /* EHU green */
-      --primary-dark:  #003d2c;   /* darker green for hover */
-      --primary-light: #007a59;   /* mid green */
+      --primary:       #5c2d91;   /* EHU purple */
+      --primary-dark:  #3e1d63;   /* darker purple for hover */
+      --primary-light: #7b44b8;   /* mid purple */
       --accent:        #c0392b;
       --success:       #2e7d32;
       --warning-col:   #e65100;
@@ -44,13 +44,12 @@
     }
     header .ehu-badge {
       background: rgba(255,255,255,.15);
-      border: 1px solid rgba(255,255,255,.3);
+      border: 1px solid rgba(255,255,255,.35);
       border-radius: 4px;
-      padding: .25rem .6rem;
-      font-size: .7rem;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+      padding: .3rem .75rem;
+      font-size: .95rem;
+      font-weight: 800;
+      letter-spacing: .06em;
       white-space: nowrap;
     }
     header .hdr-text { flex: 1; }
@@ -84,7 +83,7 @@
       position: relative;
     }
     .upload-zone:hover,
-    .upload-zone.drag-over { border-color: var(--primary); background: #edf7f3; }
+    .upload-zone.drag-over { border-color: var(--primary); background: #f5f0fb; }
     .upload-zone input[type="file"] {
       position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
     }
@@ -120,7 +119,7 @@
       color: var(--text);
       cursor: pointer;
     }
-    select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,87,63,.15); }
+    select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(92,45,145,.15); }
 
     .btn-primary {
       display: block; width: 100%;
@@ -147,7 +146,7 @@
     .privacy-notice {
       display: flex; align-items: flex-start; gap: .7rem;
       margin-top: 1.2rem; padding: .85rem 1rem;
-      background: #edf7f3; border: 1px solid #a5d6c4;
+      background: #f5f0fb; border: 1px solid #c9aeed;
       border-radius: var(--radius);
       font-size: .8rem; color: var(--primary);
     }
@@ -285,7 +284,7 @@
     .ref-link {
       color: var(--primary);
       text-decoration: underline;
-      text-decoration-color: rgba(0,87,63,.35);
+      text-decoration-color: rgba(92,45,145,.35);
       word-break: break-all;
     }
     .ref-link:hover { text-decoration-color: var(--primary); }
@@ -336,7 +335,7 @@
 
 <header>
   <div class="inner">
-    <span class="ehu-badge">Edge Hill<br>University</span>
+    <span class="ehu-badge">EHU</span>
     <div class="hdr-text">
       <h1>Reference Checker</h1>
       <p>Automated reference and citation checking — all processing happens in your browser</p>
