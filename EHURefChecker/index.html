@@ -632,17 +632,32 @@ async function extractPDF(file) {
 function renderPDFColumn(items) {
   if (!items.length) return '';
   const sorted = [...items].sort((a, b) => {
-    const dy = b.transform[5] - a.transform[5]; // descending y
-    if (Math.abs(dy) > 3) return dy;
-    return a.transform[4] - b.transform[4];      // ascending x
+    const dy = b.transform[5] - a.transform[5]; // descending y (top → bottom)
+    if (Math.abs(dy) > 4) return dy;
+    return a.transform[4] - b.transform[4];      // ascending x (left → right)
   });
-  let out   = '';
-  let lastY = null;
+  let out      = '';
+  let lastY    = null;
+  let lastText = '';
   for (const item of sorted) {
-    const y = item.transform[5];
-    if (lastY !== null && Math.abs(y - lastY) > 3) out += '\n';
-    out += decodeEncodedItem(item.str);
-    lastY = y;
+    const y    = item.transform[5];
+    const text = decodeEncodedItem(item.str);
+    if (!text) continue;
+
+    if (lastY !== null && Math.abs(y - lastY) > 4) {
+      // Don't insert a newline if the previous item ended with '[' and this
+      // item looks like the rest of a reference number (digits + ']').
+      // Some PDFs emit '[' and '1]' as separate items at fractionally
+      // different Y-positions, so we stitch them together here.
+      if (/\[$/.test(lastText) && /^\d+\]/.test(text)) {
+        // join without newline — fall through to concatenation below
+      } else {
+        out += '\n';
+      }
+    }
+    out     += text;
+    lastY    = y;
+    lastText = text;
   }
   return out;
 }
@@ -932,29 +947,45 @@ function looksLikeSectionSkip(line) {
 function extractReferences(bibText, style) {
   if (!bibText || bibText.trim().length < 5) return [];
 
-  // Strip form-feed characters before splitting so they don't corrupt line content
-  const lines = bibText.replace(/\f/g, '\n').split('\n')
-    .map(l => l.trim()).filter(l => l.length > 0);
+  // For numbered styles (IEEE, Vancouver) some PDFs emit '[' and '1]' as
+  // separate text items at slightly different Y positions, landing on separate
+  // lines. Re-join them here before splitting into entries.
+  const isNumbered = ['ieee', 'vancouver'].includes(style);
+  let cleaned = bibText.replace(/\f/g, '\n');
+  if (isNumbered) {
+    // Merge cases like "[\n1] " → "[1] "
+    cleaned = cleaned.replace(/\[\n(\d+\])/g, '[$1');
+  }
+
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
   const refs  = [];
   let current = '';
 
-  for (const line of lines) {
-    // True section heading after the ref list — stop entirely
-    if (looksLikeSectionStop(line)) break;
+  // For numbered styles, ONLY [N] or "N. " triggers a new entry.
+  // Using the general looksLikeRefStart for IEEE causes false splits on
+  // continuation lines that start with an author surname, e.g.
+  // "Liu, W. Chen and X. Zhang, 'title,' IEEE Trans., 2023."
+  function isNewEntry(line) {
+    if (isNumbered) {
+      return /^\[\d+\]/.test(line) || /^\d+\.\s+[A-Z]/.test(line);
+    }
+    return looksLikeRefStart(line);
+  }
 
-    // Page numbers, form feeds, blanks — skip but keep going
+  for (const line of lines) {
+    if (looksLikeSectionStop(line)) break;
     if (looksLikeSectionSkip(line)) continue;
 
-    if (current.length > 0 && looksLikeRefStart(line)) {
-      // Cap length as a safeguard against bleed-through from PDF layout artefacts
-      refs.push(current.trim().slice(0, 600));
+    if (current.length > 0 && isNewEntry(line)) {
+      // 2000-char cap — long IEEE entries with many authors need the extra room
+      refs.push(current.trim().slice(0, 2000));
       current = line;
     } else {
       current += (current ? ' ' : '') + line;
     }
   }
-  if (current.trim().length > 5) refs.push(current.trim().slice(0, 600));
+  if (current.trim().length > 5) refs.push(current.trim().slice(0, 2000));
 
   return refs;
 }
